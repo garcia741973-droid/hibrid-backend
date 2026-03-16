@@ -4,7 +4,10 @@ const router = express.Router();
 const storeController = require('./storeController.cjs');
 
 const requireAuth = require('../../middlewares/requireAuth.cjs');
-const requireAdmin = require('../../middlewares/requireAdmin.cjs');
+const requireAdminModule = require('../../middlewares/requireAdmin.cjs');
+
+const requireAdmin = requireAdminModule.default || requireAdminModule;
+
 
 /// PRODUCTOS
 
