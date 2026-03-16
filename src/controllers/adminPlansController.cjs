@@ -1,4 +1,4 @@
-const pool = require('../config/db');
+const { pool } = require('../config/db');
 
 // Crear plan
 exports.createPlan = async (req,res)=>{
