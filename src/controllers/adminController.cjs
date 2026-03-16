@@ -5,25 +5,52 @@ exports.createClient = async (req, res) => {
 
  try {
 
-  const { name,email,phone,membership_days } = req.body;
+  const {
+   name,
+   last_name,
+   email,
+   phone,
+   gender,
+   birth_date,
+   emergency_contact_name,
+   emergency_contact_phone
+  } = req.body;
 
   const password = "123456";
 
   const hashedPassword = await bcrypt.hash(password,10);
 
-  const startDate = new Date();
-
-  const endDate = new Date();
-  endDate.setDate(startDate.getDate() + membership_days);
-
   const result = await pool.query(
    `
    INSERT INTO users
-   (name,email,password,role,phone,membership_start,membership_end)
-   VALUES ($1,$2,$3,'client',$4,$5,$6)
+   (
+    name,
+    last_name,
+    email,
+    password,
+    role,
+    phone,
+    gender,
+    birth_date,
+    emergency_contact_name,
+    emergency_contact_phone,
+    created_at
+   )
+   VALUES
+   ($1,$2,$3,$4,'client',$5,$6,$7,$8,$9,NOW())
    RETURNING id,name,email
    `,
-   [name,email,hashedPassword,phone,startDate,endDate]
+   [
+    name,
+    last_name,
+    email,
+    hashedPassword,
+    phone,
+    gender,
+    birth_date,
+    emergency_contact_name,
+    emergency_contact_phone
+   ]
   );
 
   const user = result.rows[0];
@@ -43,7 +70,11 @@ exports.createClient = async (req, res) => {
 
  } catch(error){
 
-  res.status(500).json({error:error.message});
+  console.error(error);
+
+  res.status(500).json({
+   error:"Error creando cliente"
+  });
 
  }
 
