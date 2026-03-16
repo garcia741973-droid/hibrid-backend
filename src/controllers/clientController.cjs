@@ -146,3 +146,27 @@ exports.getMe = async (req, res) => {
   }
 
 };
+
+exports.getPlans = async (req,res)=>{
+
+  try{
+
+    const {rows} = await pool.query(
+      `SELECT id,name,duration_days,price,description
+       FROM plans
+       WHERE is_active=true
+       ORDER BY price`
+    );
+
+    res.json(rows);
+
+  }catch(err){
+
+    console.error(err);
+
+    res.status(500).json({
+      error:"Error obteniendo planes"
+    });
+
+    };
+};
