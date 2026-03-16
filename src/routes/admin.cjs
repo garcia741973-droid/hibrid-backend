@@ -16,4 +16,11 @@ router.get(
  adminController.getClients
 );
 
+router.put(
+ "/update-client/:id",
+ requireAuth,
+ requireRole(["admin","superadmin"]),
+ adminController.updateClient
+);
+
 module.exports = router;

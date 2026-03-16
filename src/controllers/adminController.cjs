@@ -118,4 +118,61 @@ exports.getClients = async (req, res) => {
 
  }
 
+    exports.updateClient = async (req,res) => {
+
+    try {
+
+    const id = req.params.id;
+
+    const {
+    name,
+    last_name,
+    email,
+    phone,
+    gender,
+    birth_date,
+    emergency_contact_name,
+    emergency_contact_phone
+    } = req.body;
+
+    await pool.query(
+    `
+    UPDATE users
+    SET
+        name=$1,
+        last_name=$2,
+        email=$3,
+        phone=$4,
+        gender=$5,
+        birth_date=$6,
+        emergency_contact_name=$7,
+        emergency_contact_phone=$8
+    WHERE id=$9
+    `,
+    [
+        name,
+        last_name,
+        email,
+        phone,
+        gender,
+        birth_date,
+        emergency_contact_name,
+        emergency_contact_phone,
+        id
+    ]
+    );
+
+    res.json({message:"Cliente actualizado"});
+
+    } catch(error){
+
+    console.error(error);
+
+    res.status(500).json({error:"Error actualizando cliente"});
+
+    }
+
+    };
+
+
 };
