@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
 
-const controller = require('../controllers/adminPlansController');
-const requireAuth = require('../middleware/requireAuth');
-const requireRole = require('../middleware/requireRole');
+const controller = require('../controllers/adminPlansController.cjs');
+const requireAuth = require('../middlewares/requireAuth.cjs');
+const requireRole = require('../middlewares/requireRole.cjs');
 
 router.post('/create-plan',
 requireAuth,

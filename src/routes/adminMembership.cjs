@@ -1,10 +1,9 @@
 const express = require('express');
 const router = express.Router();
 
-const controller = require('../controllers/adminMembershipController');
-
-const requireAuth = require('../middleware/requireAuth');
-const requireRole = require('../middleware/requireRole');
+const controller = require('../controllers/adminMembershipController.cjs');
+const requireAuth = require('../middlewares/requireAuth.cjs');
+const requireRole = require('../middlewares/requireRole.cjs');
 
 router.get('/membership-requests',
 requireAuth,
