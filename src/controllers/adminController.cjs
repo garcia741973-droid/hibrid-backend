@@ -94,20 +94,23 @@ exports.getClients = async (req, res) => {
 
     const result = await pool.query(
       `
-      SELECT
+        SELECT
         id,
         name,
         last_name,
         email,
         phone,
         gender,
+        birth_date,
+        emergency_contact_name,
+        emergency_contact_phone,
         photo_url,
         membership_start,
         membership_end,
         qr_code
-      FROM users
-      WHERE role='client'
-      ORDER BY id DESC
+        FROM users
+        WHERE role='client'
+        ORDER BY id DESC
       `
     );
 
