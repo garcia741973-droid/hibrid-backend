@@ -7,6 +7,8 @@ const { pool } = require("./config/db");
 const authRoutes = require("./routes/auth.cjs");
 const adminRoutes = require("./routes/admin.cjs");
 
+const staffMembershipRoutes = require('./routes/staffMembership.cjs');
+
 const app = express();
 
 // middlewares
@@ -24,6 +26,8 @@ const adminMembershipRoutes = require('./routes/adminMembership.cjs');
 app.use('/client', clientRoutes);
 app.use('/admin', adminPlansRoutes);
 app.use('/admin', adminMembershipRoutes);
+
+app.use('/staff', staffMembershipRoutes);
 
 // ruta test
 app.get("/", async (req, res) => {

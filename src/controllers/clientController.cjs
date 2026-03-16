@@ -191,3 +191,31 @@ exports.getMyMembership = async (req, res) => {
   }
 
 };
+
+// =============================
+// LISTAR CLIENTES (STAFF)
+// =============================
+exports.getClients = async (req, res) => {
+
+  try {
+
+    const { rows } = await pool.query(
+      `SELECT id, name, last_name
+       FROM users
+       WHERE role = 'client'
+       ORDER BY name`
+    );
+
+    res.json(rows);
+
+  } catch (err) {
+
+    console.error(err);
+
+    res.status(500).json({
+      error: "Error obteniendo clientes"
+    });
+
+  }
+
+};
