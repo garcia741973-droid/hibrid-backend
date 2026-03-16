@@ -1,4 +1,4 @@
-const pool = require('../../config/db.cjs');
+const pool = require('../../config/db.js');
 
 exports.createSale = async (req,res)=>{
 
