@@ -70,7 +70,7 @@ exports.requestMembership = async (req, res) => {
 
   try {
 
-    const user_id = req.user.id;
+    const user_id = req.body.user_id || req.user.id;
 
     const {
       plan_id,
