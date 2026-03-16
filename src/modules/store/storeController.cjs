@@ -14,11 +14,16 @@ exports.getProducts = async (req, res) => {
 
     res.json(rows);
 
-  } catch (err) {
+    }catch(err){
 
-    res.status(500).json({ error: 'Error obteniendo productos' });
+    console.error("ERROR PRODUCTS:", err);
 
-  }
+    res.status(500).json({
+        error:'Error obteniendo productos',
+        details: err.message
+    });
+
+    }
 };
 
 
