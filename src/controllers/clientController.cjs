@@ -1,4 +1,4 @@
-hibrid-backend/src/controllers/clientController.cjsconst pool = require('../config/db');
+const pool = require('../config/db');
 
 // Obtener planes activos
 exports.getPlans = async (req, res) => {
