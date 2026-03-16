@@ -142,7 +142,8 @@ exports.updateClient = async (req,res) => {
       gender,
       birth_date,
       emergency_contact_name,
-      emergency_contact_phone
+      emergency_contact_phone,
+      photo_url
     } = req.body;
 
     await pool.query(
@@ -156,8 +157,9 @@ exports.updateClient = async (req,res) => {
         gender=$5,
         birth_date=$6,
         emergency_contact_name=$7,
-        emergency_contact_phone=$8
-      WHERE id=$9
+        emergency_contact_phone=$8,
+        photo_url=$9
+      WHERE id=$10
       `,
       [
         name,
@@ -168,6 +170,7 @@ exports.updateClient = async (req,res) => {
         birth_date,
         emergency_contact_name,
         emergency_contact_phone,
+        photo_url,
         id
       ]
     );
