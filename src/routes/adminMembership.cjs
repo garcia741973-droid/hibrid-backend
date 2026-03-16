@@ -15,4 +15,11 @@ requireAuth,
 requireRole(["admin","superadmin"]),
 controller.approveMembership);
 
+router.post(
+'/validate-qr',
+requireAuth,
+requireRole(["admin","superadmin"]),
+controller.validateQr
+);
+
 module.exports = router;
