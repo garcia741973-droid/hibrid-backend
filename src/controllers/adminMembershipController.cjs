@@ -5,21 +5,22 @@ exports.getRequests = async (req,res)=>{
 
   try{
 
-    const {rows} = await pool.query(
-      `SELECT
-       mr.id,
-       u.name,
-       u.last_name,
-       p.name as plan,
-       mr.start_date,
-       mr.end_date,
-       mr.payment_proof_url,
-       mr.status
-       FROM membership_requests mr
-       JOIN users u ON mr.user_id=u.id
-       JOIN plans p ON mr.plan_id=p.id
-       ORDER BY mr.created_at DESC`
-    );
+  const {rows} = await pool.query(
+    `SELECT
+    mr.id,
+    u.name,
+    u.last_name,
+    p.name as plan,
+    mr.start_date,
+    mr.end_date,
+    mr.payment_proof_url,
+    mr.status
+    FROM membership_requests mr
+    JOIN users u ON mr.user_id=u.id
+    JOIN plans p ON mr.plan_id=p.id
+    WHERE mr.status = 'pending'
+    ORDER BY mr.created_at DESC`
+  );
 
     res.json(rows);
 
