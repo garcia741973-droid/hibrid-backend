@@ -72,6 +72,31 @@ exports.requestMembership = async (req, res) => {
 
     const user_id = req.body.user_id || req.user.id;
 
+    // verificar si ya tiene membresía activa
+
+    const activeCheck = await pool.query(
+      `
+      SELECT membership_end
+      FROM users
+      WHERE id=$1
+      `,
+      [user_id]
+    );
+
+    if(activeCheck.rows.length > 0){
+
+      const end = activeCheck.rows[0].membership_end;
+
+      if(end && new Date(end) > new Date()){
+
+        return res.status(400).json({
+          error: "El cliente ya tiene una membresía activa"
+        });
+
+      }
+
+    }
+
     const {
       plan_id,
       start_date,
