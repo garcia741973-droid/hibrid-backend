@@ -8,8 +8,6 @@ const requireRole = require("../middlewares/requireRole.cjs");
 
 router.post(
  "/create-client",
- requireAuth,
- requireRole(["admin","superadmin"]),
  adminController.createClient
 );
 
