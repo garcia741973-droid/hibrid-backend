@@ -116,3 +116,33 @@ exports.requestMembership = async (req, res) => {
     };
 
 };
+
+exports.getMe = async (req, res) => {
+
+  try {
+
+    const user_id = req.user.id;
+
+    const { rows } = await pool.query(
+      `SELECT
+        id,
+        name,
+        last_name,
+        qr_code,
+        membership_start,
+        membership_end
+       FROM users
+       WHERE id=$1`,
+      [user_id]
+    );
+
+    res.json(rows[0]);
+
+  } catch (err) {
+
+    console.error(err);
+    res.status(500).json({ error: "Error obteniendo usuario" });
+
+  }
+
+};
