@@ -1,5 +1,63 @@
 const pool = require('../../config/db.js');
 
+
+const pool = require('../../config/db');
+
+// obtener productos
+exports.getProducts = async (req, res) => {
+  try {
+
+    const { rows } = await pool.query(`
+      SELECT id,name,price,stock,image_url
+      FROM products
+      WHERE is_active = true
+      ORDER BY name
+    `);
+
+    res.json(rows);
+
+  } catch (err) {
+
+    res.status(500).json({ error: 'Error obteniendo productos' });
+
+  }
+};
+
+
+// crear producto
+exports.createProduct = async (req, res) => {
+
+  try {
+
+    const {
+      name,
+      description,
+      cost_price,
+      price,
+      stock,
+      image_url
+    } = req.body;
+
+    const { rows } = await pool.query(
+      `
+      INSERT INTO products
+      (name,description,cost_price,price,stock,image_url)
+      VALUES ($1,$2,$3,$4,$5,$6)
+      RETURNING *
+      `,
+      [name, description, cost_price, price, stock, image_url]
+    );
+
+    res.json(rows[0]);
+
+  } catch (err) {
+
+    res.status(500).json({ error: 'Error creando producto' });
+
+  }
+
+};
+
 exports.createSale = async (req,res)=>{
 
   const client = await pool.connect();
