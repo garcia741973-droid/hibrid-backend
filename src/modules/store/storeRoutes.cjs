@@ -1,9 +1,8 @@
 const express = require('express');
 const router = express.Router();
 
-const storeController = require('./storeController');
-
-const requireAuth = require('../../middlewares/requireAuth');
+const storeController = require('./storeController.cjs');
+const requireAuth = require('../../middlewares/requireAuth.cjs');
 
 // productos
 router.get('/products', requireAuth, storeController.getProducts);

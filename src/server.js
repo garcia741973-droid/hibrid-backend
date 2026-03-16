@@ -60,5 +60,5 @@ const membershipRoutes = require('./routes/membership.cjs');
 
 app.use('/', membershipRoutes);
 
-const storeRoutes = require('./modules/store/storeRoutes');
+const storeRoutes = require('./modules/store/storeRoutes.cjs');
 app.use('/store', storeRoutes);
