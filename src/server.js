@@ -59,3 +59,6 @@ app.listen(PORT, () => {
 const membershipRoutes = require('./routes/membership.cjs');
 
 app.use('/', membershipRoutes);
+
+const storeRoutes = require('./modules/store/storeRoutes');
+app.use('/store', storeRoutes);
