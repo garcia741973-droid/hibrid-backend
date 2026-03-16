@@ -223,3 +223,56 @@ exports.cancelSale = async (req,res)=>{
   }
 
 };
+
+exports.updateProduct = async (req, res) => {
+
+  try {
+
+    const { id } = req.params;
+
+    const {
+      name,
+      cost_price,
+      price,
+      stock,
+      image_url,
+      is_active
+    } = req.body;
+
+    const { rows } = await pool.query(
+      `
+      UPDATE products
+      SET
+        name = $1,
+        cost_price = $2,
+        price = $3,
+        stock = $4,
+        image_url = $5,
+        is_active = $6
+      WHERE id = $7
+      RETURNING *
+      `,
+      [
+        name,
+        cost_price,
+        price,
+        stock,
+        image_url,
+        is_active,
+        id
+      ]
+    );
+
+    res.json(rows[0]);
+
+  } catch (err) {
+
+    console.error("UPDATE PRODUCT ERROR", err);
+
+    res.status(500).json({
+      error: "Error actualizando producto"
+    });
+
+  }
+
+};
