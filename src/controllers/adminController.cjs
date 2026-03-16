@@ -79,3 +79,39 @@ exports.createClient = async (req, res) => {
  }
 
 };
+
+exports.getClients = async (req, res) => {
+
+ try {
+
+  const result = await pool.query(
+   `
+   SELECT
+    id,
+    name,
+    last_name,
+    email,
+    phone,
+    gender,
+    membership_start,
+    membership_end,
+    qr_code
+   FROM users
+   WHERE role='client'
+   ORDER BY id DESC
+   `
+  );
+
+  res.json(result.rows);
+
+ } catch(error){
+
+  console.error(error);
+
+  res.status(500).json({
+   error:"Error obteniendo clientes"
+  });
+
+ }
+
+};

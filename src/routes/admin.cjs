@@ -11,4 +11,9 @@ router.post(
  adminController.createClient
 );
 
+router.get(
+ "/clients",
+ adminController.getClients
+);
+
 module.exports = router;
