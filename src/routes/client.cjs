@@ -9,5 +9,6 @@ router.get('/plans', requireAuth, controller.getPlans);
 router.get('/payment-qr', requireAuth, controller.getPaymentQr);
 router.post('/request-membership', requireAuth, controller.requestMembership);
 router.get('/me', requireAuth, controller.getMe);
+router.get('/my-membership', requireAuth, controller.getMyMembership);
 
 module.exports = router;
