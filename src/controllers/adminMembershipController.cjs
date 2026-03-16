@@ -87,35 +87,51 @@ exports.approveMembership = async (req,res)=>{
       const {qr_code} = req.body;
 
       const result = await pool.query(
-        `SELECT name,last_name,membership_end
+        `SELECT name,last_name,photo_url,membership_end
         FROM users
         WHERE qr_code=$1`,
         [qr_code]
       );
 
       if(result.rows.length===0){
-        return res.status(404).json({error:"Usuario no encontrado"});
+        return res.status(404).json({
+          error:"Usuario no encontrado"
+        });
       }
 
       const user = result.rows[0];
 
-      if(!user.membership_end){
+      const now = new Date();
+      const end = user.membership_end ? new Date(user.membership_end) : null;
+
+      if(!end){
         return res.status(403).json({
-          error:"Cliente sin membresía activa"
+          error:"Cliente sin membresía activa",
+          client:{
+            name:`${user.name} ${user.last_name}`,
+            photo:user.photo_url
+          }
         });
       }
 
-      const now = new Date();
-      const end = new Date(user.membership_end);
-
       if(end < now){
         return res.status(403).json({
-          error:"Membresía vencida"
+          error:"Membresía vencida",
+          client:{
+            name:`${user.name} ${user.last_name}`,
+            photo:user.photo_url,
+            membership_end:user.membership_end
+          }
         });
       }
 
       res.json({
-        message:`Acceso permitido: ${user.name} ${user.last_name}`
+        message:"Acceso permitido",
+        client:{
+          name:`${user.name} ${user.last_name}`,
+          photo:user.photo_url,
+          membership_end:user.membership_end
+        }
       });
 
     }catch(err){
