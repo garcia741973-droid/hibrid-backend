@@ -18,7 +18,7 @@ controller.approveMembership);
 router.post(
 '/validate-qr',
 requireAuth,
-requireRole(["admin","superadmin"]),
+requireRole(["admin","superadmin","staff"]),
 controller.validateQr
 );
 

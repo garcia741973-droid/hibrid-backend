@@ -39,16 +39,35 @@ exports.approveMembership = async (req,res)=>{
 
     const request_id = req.params.id;
 
-    const requestResult = await pool.query(
-      `SELECT * FROM membership_requests WHERE id=$1`,
+    const result = await pool.query(
+      `SELECT mr.*, p.duration_days
+       FROM membership_requests mr
+       JOIN plans p ON mr.plan_id = p.id
+       WHERE mr.id=$1`,
       [request_id]
     );
 
-    if(requestResult.rows.length===0){
+    if(result.rows.length===0){
       return res.status(404).json({error:"Solicitud no encontrada"});
     }
 
-    const request = requestResult.rows[0];
+    const request = result.rows[0];
+
+    const startDate = new Date(request.start_date);
+    const today = new Date();
+
+    today.setHours(0,0,0,0);
+    startDate.setHours(0,0,0,0);
+
+    // VALIDACIÓN IMPORTANTE
+    if(startDate < today){
+      return res.status(400).json({
+        error:"La fecha de inicio no puede ser anterior a hoy"
+      });
+    }
+
+    const endDate = new Date(startDate);
+    endDate.setDate(endDate.getDate() + request.duration_days);
 
     await pool.query(
       `UPDATE users
@@ -56,8 +75,8 @@ exports.approveMembership = async (req,res)=>{
            membership_end=$2
        WHERE id=$3`,
        [
-        request.start_date,
-        request.end_date,
+        startDate,
+        endDate,
         request.user_id
        ]
     );
@@ -65,17 +84,24 @@ exports.approveMembership = async (req,res)=>{
     await pool.query(
       `UPDATE membership_requests
        SET status='approved',
-           approved_by=$1,
+           end_date=$1,
+           approved_by=$2,
            approved_at=NOW()
-       WHERE id=$2`,
-       [req.user.id,request_id]
+       WHERE id=$3`,
+       [endDate,req.user.id,request_id]
     );
 
-    res.json({message:"Membresía activada"});
+    res.json({
+      message:"Membresía activada",
+      start_date:startDate,
+      end_date:endDate
+    });
 
   }catch(err){
+
     console.error(err);
     res.status(500).json({error:"Error aprobando membresía"});
+
   }
 
 };

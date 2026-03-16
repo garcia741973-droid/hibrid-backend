@@ -1,6 +1,7 @@
 const { pool } = require('../config/db');
 
-// Crear plan
+
+// Crear plan (ADMIN)
 exports.createPlan = async (req,res)=>{
 
   try{
@@ -18,27 +19,45 @@ exports.createPlan = async (req,res)=>{
     res.json(rows[0]);
 
   }catch(err){
+
     console.error(err);
-    res.status(500).json({error:"Error creando plan"});
+
+    res.status(500).json({
+      error:"Error creando plan"
+    });
+
   }
 
 };
 
 
-// Obtener planes
+// Obtener planes activos (CLIENTES)
 exports.getPlans = async (req,res)=>{
 
   try{
 
     const {rows} = await pool.query(
-      `SELECT * FROM plans ORDER BY id DESC`
+      `SELECT
+        id,
+        name,
+        duration_days,
+        price,
+        description
+      FROM plans
+      WHERE is_active = true
+      ORDER BY duration_days ASC`
     );
 
     res.json(rows);
 
   }catch(err){
+
     console.error(err);
-    res.status(500).json({error:"Error obteniendo planes"});
+
+    res.status(500).json({
+      error:"Error obteniendo planes"
+    });
+
   }
 
 };
