@@ -1,20 +1,22 @@
 const { pool } = require("../config/db");
 const bcrypt = require("bcrypt");
 
-    exports.createClient = async (req, res) => {
 
-    try {
+/// CREAR CLIENTE
+exports.createClient = async (req, res) => {
+
+  try {
 
     const {
-    name,
-    last_name,
-    email,
-    phone,
-    gender,
-    birth_date,
-    emergency_contact_name,
-    emergency_contact_phone,
-    photo_url
+      name,
+      last_name,
+      email,
+      phone,
+      gender,
+      birth_date,
+      emergency_contact_name,
+      emergency_contact_phone,
+      photo_url
     } = req.body;
 
     const password = "123456";
@@ -22,9 +24,9 @@ const bcrypt = require("bcrypt");
     const hashedPassword = await bcrypt.hash(password,10);
 
     const result = await pool.query(
-    `
-    INSERT INTO users
-    (
+      `
+      INSERT INTO users
+      (
         name,
         last_name,
         email,
@@ -37,12 +39,12 @@ const bcrypt = require("bcrypt");
         emergency_contact_phone,
         photo_url,
         created_at
-    )
-    VALUES
-    ($1,$2,$3,$4,'client',$5,$6,$7,$8,$9,$10,NOW())
-    RETURNING id,name,email
-    `,
-    [
+      )
+      VALUES
+      ($1,$2,$3,$4,'client',$5,$6,$7,$8,$9,$10,NOW())
+      RETURNING id,name,email
+      `,
+      [
         name,
         last_name,
         email,
@@ -53,7 +55,7 @@ const bcrypt = require("bcrypt");
         emergency_contact_name,
         emergency_contact_phone,
         photo_url
-    ]
+      ]
     );
 
     const user = result.rows[0];
@@ -61,84 +63,92 @@ const bcrypt = require("bcrypt");
     const qrCode = `HIBRID-USER-${user.id}`;
 
     await pool.query(
-    `UPDATE users SET qr_code=$1 WHERE id=$2`,
-    [qrCode,user.id]
+      `UPDATE users SET qr_code=$1 WHERE id=$2`,
+      [qrCode,user.id]
     );
 
     res.json({
-    message:"Cliente creado",
-    user,
-    qr:qrCode
+      message:"Cliente creado",
+      user,
+      qr:qrCode
     });
 
-    } catch(error){
+  } catch(error){
 
     console.error(error);
 
     res.status(500).json({
-    error:"Error creando cliente"
+      error:"Error creando cliente"
     });
 
-    }
+  }
 
-    };
+};
 
+
+
+/// LISTAR CLIENTES
 exports.getClients = async (req, res) => {
 
- try {
+  try {
 
-  const result = await pool.query(
-   `
-    SELECT
-    id,
-    name,
-    last_name,
-    email,
-    phone,
-    gender,
-    photo_url,
-    membership_start,
-    membership_end,
-    qr_code
-    FROM users
-   WHERE role='client'
-   ORDER BY id DESC
-   `
-  );
+    const result = await pool.query(
+      `
+      SELECT
+        id,
+        name,
+        last_name,
+        email,
+        phone,
+        gender,
+        photo_url,
+        membership_start,
+        membership_end,
+        qr_code
+      FROM users
+      WHERE role='client'
+      ORDER BY id DESC
+      `
+    );
 
-  res.json(result.rows);
+    res.json(result.rows);
 
- } catch(error){
+  } catch(error){
 
-  console.error(error);
+    console.error(error);
 
-  res.status(500).json({
-   error:"Error obteniendo clientes"
-  });
+    res.status(500).json({
+      error:"Error obteniendo clientes"
+    });
 
- }
+  }
 
-    exports.updateClient = async (req,res) => {
+};
 
-    try {
+
+
+/// ACTUALIZAR CLIENTE
+exports.updateClient = async (req,res) => {
+
+  try {
 
     const id = req.params.id;
 
     const {
-    name,
-    last_name,
-    email,
-    phone,
-    gender,
-    birth_date,
-    emergency_contact_name,
-    emergency_contact_phone
+      name,
+      last_name,
+      email,
+      phone,
+      gender,
+      birth_date,
+      emergency_contact_name,
+      emergency_contact_phone
     } = req.body;
 
     await pool.query(
-    `
-    UPDATE users
-    SET
+      `
+      UPDATE users
+      SET
         name=$1,
         last_name=$2,
         email=$3,
@@ -147,9 +157,9 @@ exports.getClients = async (req, res) => {
         birth_date=$6,
         emergency_contact_name=$7,
         emergency_contact_phone=$8
-    WHERE id=$9
-    `,
-    [
+      WHERE id=$9
+      `,
+      [
         name,
         last_name,
         email,
@@ -159,20 +169,21 @@ exports.getClients = async (req, res) => {
         emergency_contact_name,
         emergency_contact_phone,
         id
-    ]
+      ]
     );
 
-    res.json({message:"Cliente actualizado"});
+    res.json({
+      message:"Cliente actualizado"
+    });
 
-    } catch(error){
+  } catch(error){
 
     console.error(error);
 
-    res.status(500).json({error:"Error actualizando cliente"});
+    res.status(500).json({
+      error:"Error actualizando cliente"
+    });
 
-    }
-
-    };
-
+  }
 
 };
