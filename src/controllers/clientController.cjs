@@ -72,23 +72,42 @@ exports.requestMembership = async (req, res) => {
 
     const user_id = req.body.user_id || req.user.id;
 
-    // verificar si ya tiene membresía activa
+    // 🔥 1. datos request (PRIMERO SIEMPRE)
+    const plan_id = parseInt(req.body.plan_id);
+    const start_date = req.body.start_date;
+    const payment_proof_url = req.body.payment_proof_url || null;
 
-    const activeCheck = await pool.query(
-      `
-      SELECT membership_end
-      FROM users
-      WHERE id=$1
-      `,
-      [user_id]
+    console.log("BODY:", req.body);
+
+    if (!plan_id) {
+      return res.status(400).json({
+        error: "Plan inválido"
+      });
+    }
+
+    // 🔥 2. validar plan
+    const planResult = await pool.query(
+      `SELECT duration_days FROM plans WHERE id=$1`,
+      [plan_id]
     );
 
-    if(activeCheck.rows.length > 0){
+    if (planResult.rows.length === 0) {
+      return res.status(400).json({
+        error: "Plan no encontrado"
+      });
+    }
 
-      const end = activeCheck.rows[0].membership_end;
+    const duration = planResult.rows[0].duration_days;
 
-    // 🔥 validar superposición real de fechas
+    // 🔥 3. calcular end_date
+    const endResult = await pool.query(
+      `SELECT ($1::date + $2 * INTERVAL '1 day') as end_date`,
+      [start_date, duration]
+    );
 
+    const end_date = endResult.rows[0].end_date;
+
+    // 🔥 4. validar superposición (AHORA SÍ YA EXISTEN VARIABLES)
     const overlapCheck = await pool.query(
       `
       SELECT id
@@ -112,45 +131,7 @@ exports.requestMembership = async (req, res) => {
       });
     }
 
-    }
-
-    const plan_id = parseInt(req.body.plan_id);
-    const start_date = req.body.start_date;
-
-    // 🔥 imagen subida por multer
-    const payment_proof_url = req.body.payment_proof_url || null;
-
-    console.log("BODY:", req.body);
-    console.log("FILE:", req.file);
-
-      if (!plan_id) {
-    return res.status(400).json({
-      error: "Plan inválido"
-    });
-  }
-
-    const planResult = await pool.query(
-      `SELECT duration_days FROM plans WHERE id=$1`,
-      [plan_id]
-    );
-
-    if (planResult.rows.length === 0) {
-
-      return res.status(400).json({
-        error: "Plan no encontrado"
-      });
-
-    }
-
-    const duration = planResult.rows[0].duration_days;
-
-    const endResult = await pool.query(
-      `SELECT ($1::date + $2 * INTERVAL '1 day') as end_date`,
-      [start_date, duration]
-    );
-
-    const end_date = endResult.rows[0].end_date;
-
+    // 🔥 5. INSERT FINAL
     const insert = await pool.query(
       `INSERT INTO membership_requests
        (user_id, plan_id, start_date, end_date, payment_proof_url)
@@ -163,10 +144,10 @@ exports.requestMembership = async (req, res) => {
 
   } catch (err) {
 
-    console.error(err);
+    console.error("ERROR REAL:", err);
 
     res.status(500).json({
-      error: "Error creando solicitud"
+      error: err.message
     });
 
   }
