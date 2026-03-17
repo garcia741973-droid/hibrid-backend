@@ -235,8 +235,7 @@ exports.updateProduct = async (req, res) => {
       cost_price,
       price,
       stock,
-      image_url,
-      is_active
+      image_url
     } = req.body;
 
     const { rows } = await pool.query(
@@ -247,9 +246,8 @@ exports.updateProduct = async (req, res) => {
         cost_price = $2,
         price = $3,
         stock = $4,
-        image_url = $5,
-        is_active = $6
-      WHERE id = $7
+        image_url = $5
+      WHERE id = $6
       RETURNING *
       `,
       [
@@ -258,7 +256,6 @@ exports.updateProduct = async (req, res) => {
         price,
         stock,
         image_url,
-        is_active,
         id
       ]
     );
