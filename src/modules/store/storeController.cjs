@@ -283,3 +283,72 @@ exports.updateProduct = async (req, res) => {
   }
 
 };
+
+exports.addStock = async (req, res) => {
+
+  const client = await pool.connect();
+
+  try {
+
+    await client.query('BEGIN');
+
+    const { product_id, quantity, cost_price } = req.body;
+    const staffId = req.user.id;
+
+    /// 1. VALIDAR PRODUCTO
+    const product = await client.query(
+      `SELECT stock FROM products WHERE id=$1`,
+      [product_id]
+    );
+
+    if(product.rows.length === 0){
+      throw new Error("Producto no existe");
+    }
+
+    /// 2. ACTUALIZAR STOCK
+    await client.query(
+      `
+      UPDATE products
+      SET stock = stock + $1
+      WHERE id = $2
+      `,
+      [quantity, product_id]
+    );
+
+    /// 3. REGISTRAR MOVIMIENTO
+    await client.query(
+      `
+      INSERT INTO stock_movements
+      (product_id, type, quantity, cost_price, staff_id)
+      VALUES ($1, 'IN', $2, $3, $4)
+      `,
+      [product_id, quantity, cost_price, staffId]
+    );
+
+    /// 4. REGISTRAR EGRESO (IMPORTANTE 💰)
+    await client.query(
+      `
+      INSERT INTO cash_movements
+      (type, reference_type, reference_id, amount, staff_id)
+      VALUES ('expense', 'stock', $1, $2, $3)
+      `,
+      [product_id, quantity * cost_price, staffId]
+    );
+
+    await client.query('COMMIT');
+
+    res.json({ success: true });
+
+  } catch (err) {
+
+    await client.query('ROLLBACK');
+
+    res.status(400).json({
+      error: err.message
+    });
+
+  } finally {
+    client.release();
+  }
+
+};

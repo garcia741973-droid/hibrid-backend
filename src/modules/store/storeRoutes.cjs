@@ -26,4 +26,11 @@ router.post('/sales', requireAuth, storeController.createSale);
 
 router.put('/sales/:id/cancel', requireAdmin, storeController.cancelSale);
 
+router.post(
+  '/stock/add',
+  requireAuth,
+  requireAdmin,
+  storeController.addStock
+);
+
 module.exports = router;
