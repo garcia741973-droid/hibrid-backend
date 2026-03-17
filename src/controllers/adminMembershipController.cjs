@@ -40,7 +40,7 @@ exports.approveMembership = async (req,res)=>{
     const request_id = req.params.id;
 
     const result = await pool.query(
-      `SELECT mr.*, p.duration_days
+      `SELECT mr.*, p.duration_days, p.price
        FROM membership_requests mr
        JOIN plans p ON mr.plan_id = p.id
        WHERE mr.id=$1`,
@@ -90,6 +90,22 @@ exports.approveMembership = async (req,res)=>{
        WHERE id=$3`,
        [endDate,req.user.id,request_id]
     );
+
+    // 💰 REGISTRAR INGRESO EN CAJA (MEMBRESÍA)
+    await pool.query(
+      `
+      INSERT INTO cash_movements
+      (type, reference_type, reference_id, amount, staff_id, description, created_by_role)
+      VALUES ('income', 'membership', $1, $2, $3, $4, $5)
+      `,
+      [
+        request_id,                 // referencia a membership_request
+        request.price,              // 💰 monto del plan
+        req.user.id,
+        'Pago de membresía',
+        req.user.role
+      ]
+    );    
 
     res.json({
       message:"Membresía activada",
