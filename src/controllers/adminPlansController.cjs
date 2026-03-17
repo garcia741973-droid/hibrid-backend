@@ -61,3 +61,120 @@ exports.getPlans = async (req,res)=>{
   }
 
 };
+
+// =============================
+// OBTENER TODOS LOS PLANES (ADMIN)
+// =============================
+exports.getAllPlans = async (req,res)=>{
+
+  try{
+
+    const {rows} = await pool.query(
+      `SELECT * FROM plans ORDER BY id DESC`
+    );
+
+    res.json(rows);
+
+  }catch(err){
+
+    console.error(err);
+
+    res.status(500).json({
+      error:"Error obteniendo planes"
+    });
+
+  }
+
+};
+
+
+// =============================
+// ACTIVAR / DESACTIVAR PLAN
+// =============================
+exports.togglePlan = async (req,res)=>{
+
+  try{
+
+    const {id} = req.params;
+
+    const {rows} = await pool.query(
+      `
+      UPDATE plans
+      SET is_active = NOT is_active
+      WHERE id=$1
+      RETURNING *
+      `,
+      [id]
+    );
+
+    res.json(rows[0]);
+
+  }catch(err){
+
+    console.error(err);
+
+    res.status(500).json({
+      error:"Error actualizando plan"
+    });
+
+  }
+
+};
+
+// =============================
+// ADMIN - TODOS LOS PLANES
+// =============================
+exports.getAllPlans = async (req,res)=>{
+
+  try{
+
+    const {rows} = await pool.query(
+      `SELECT * FROM plans ORDER BY id DESC`
+    );
+
+    res.json(rows);
+
+  }catch(err){
+
+    console.error(err);
+
+    res.status(500).json({
+      error:"Error obteniendo planes"
+    });
+
+  }
+
+};
+
+// =============================
+// ACTIVAR / DESACTIVAR
+// =============================
+exports.togglePlan = async (req,res)=>{
+
+  try{
+
+    const {id} = req.params;
+
+    const {rows} = await pool.query(
+      `
+      UPDATE plans
+      SET is_active = NOT is_active
+      WHERE id=$1
+      RETURNING *
+      `,
+      [id]
+    );
+
+    res.json(rows[0]);
+
+  }catch(err){
+
+    console.error(err);
+
+    res.status(500).json({
+      error:"Error actualizando plan"
+    });
+
+  }
+
+};
