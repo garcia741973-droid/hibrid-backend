@@ -33,4 +33,11 @@ router.post(
   storeController.addStock
 );
 
+router.get(
+  '/products/:id/history',
+  requireAuth,
+  requireAdmin,
+  storeController.getProductHistory
+);
+
 module.exports = router;

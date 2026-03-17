@@ -363,3 +363,62 @@ exports.addStock = async (req, res) => {
   }
 
 };
+
+exports.getProductHistory = async (req, res) => {
+
+  try {
+
+    const { id } = req.params;
+
+    const { rows } = await pool.query(
+      `
+      SELECT 
+        sm.id,
+        sm.type,
+        sm.quantity,
+        sm.cost_price,
+        sm.created_at,
+        u.name as staff_name
+      FROM stock_movements sm
+      LEFT JOIN users u ON u.id = sm.staff_id
+      WHERE sm.product_id = $1
+      ORDER BY sm.created_at ASC
+      `,
+      [id]
+    );
+
+    let stock = 0;
+    let totalCost = 0;
+
+    const history = rows.map(r => {
+
+      if(r.type === 'IN'){
+        stock += r.quantity;
+        totalCost += (r.quantity * (r.cost_price || 0));
+      }
+
+      if(r.type === 'OUT'){
+        stock -= r.quantity;
+      }
+
+      return {
+        ...r,
+        stock_after: stock,
+        avg_cost: stock > 0 ? totalCost / stock : 0
+      };
+
+    });
+
+    res.json(history);
+
+  } catch (err) {
+
+    console.error("HISTORY ERROR", err);
+
+    res.status(500).json({
+      error: "Error obteniendo historial"
+    });
+
+  }
+
+};
