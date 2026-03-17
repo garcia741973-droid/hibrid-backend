@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { pool } = require('../config/db.js');
-const { requireAuth } = require('./auth.cjs');
+const requireAuth = require('../middlewares/requireAuth.cjs');
 
 
 // =========================
