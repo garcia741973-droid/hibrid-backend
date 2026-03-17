@@ -238,6 +238,15 @@ exports.updateProduct = async (req, res) => {
       image_url
     } = req.body;
 
+    console.log("UPDATE DATA:", {
+      id,
+      name,
+      cost_price,
+      price,
+      stock,
+      image_url
+    });
+
     const { rows } = await pool.query(
       `
       UPDATE products
@@ -264,13 +273,13 @@ exports.updateProduct = async (req, res) => {
 
   } catch (err) {
 
-    console.error("UPDATE PRODUCT ERROR", err);
+    console.error("🔥 UPDATE PRODUCT ERROR REAL:", err);
 
     res.status(500).json({
-      error: "Error actualizando producto"
+      error: "Error actualizando producto",
+      details: err.message
     });
 
   }
 
 };
-
