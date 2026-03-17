@@ -276,3 +276,50 @@ exports.updateProduct = async (req, res) => {
   }
 
 };
+
+const cloudinary = require('cloudinary').v2;
+const multer = require('multer');
+
+const upload = multer({ storage: multer.memoryStorage() });
+
+exports.uploadMiddleware = upload.single('image');
+
+exports.uploadImage = async (req, res) => {
+
+  try {
+
+    if (!req.file) {
+      return res.status(400).json({
+        error: "No se envió imagen"
+      });
+    }
+
+    const result = await new Promise((resolve, reject) => {
+
+      const stream = cloudinary.uploader.upload_stream(
+        { folder: "hibrid_products" },
+        (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        }
+      );
+
+      stream.end(req.file.buffer);
+
+    });
+
+    res.json({
+      image_url: result.secure_url
+    });
+
+  } catch (err) {
+
+    console.error("UPLOAD IMAGE ERROR", err);
+
+    res.status(500).json({
+      error: "Error subiendo imagen"
+    });
+
+  }
+
+};
