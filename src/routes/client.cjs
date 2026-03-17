@@ -18,4 +18,10 @@ router.get('/my-membership', requireAuth, controller.getMyMembership);
 // NUEVA RUTA
 router.get('/clients', requireAuth, controller.getClients);
 
+router.get(
+  '/membership-history',
+  requireAuth,
+  controller.getMembershipHistory
+);
+
 module.exports = router;

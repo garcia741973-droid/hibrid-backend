@@ -251,3 +251,44 @@ exports.getClients = async (req, res) => {
   }
 
 };
+
+// =============================
+// HISTORIAL DE MEMBRESÍAS
+// =============================
+exports.getMembershipHistory = async (req, res) => {
+
+  try {
+
+    const user_id = req.user.id;
+
+    const { rows } = await pool.query(
+      `
+      SELECT 
+        mr.id,
+        mr.start_date,
+        mr.end_date,
+        mr.status,
+        mr.created_at,
+        p.name as plan_name,
+        p.price
+      FROM membership_requests mr
+      JOIN plans p ON p.id = mr.plan_id
+      WHERE mr.user_id = $1
+      ORDER BY mr.created_at DESC
+      `,
+      [user_id]
+    );
+
+    res.json(rows);
+
+  } catch (err) {
+
+    console.error(err);
+
+    res.status(500).json({
+      error: "Error obteniendo historial"
+    });
+
+  }
+
+};
