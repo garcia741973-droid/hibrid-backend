@@ -39,5 +39,9 @@ router.patch(
   controller.togglePlan
 );
 
+router.put('/plans/:id',
+requireAuth,
+requireRole(["admin","superadmin"]),
+controller.updatePlan);
 
 module.exports = router;

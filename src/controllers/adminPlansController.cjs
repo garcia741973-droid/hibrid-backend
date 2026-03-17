@@ -178,3 +178,40 @@ exports.togglePlan = async (req,res)=>{
   }
 
 };
+
+// =============================
+// EDITAR PLAN
+// =============================
+exports.updatePlan = async (req,res)=>{
+
+  try{
+
+    const {id} = req.params;
+    const {name,duration_days,price,description} = req.body;
+
+    const {rows} = await pool.query(
+      `
+      UPDATE plans
+      SET name=$1,
+          duration_days=$2,
+          price=$3,
+          description=$4
+      WHERE id=$5
+      RETURNING *
+      `,
+      [name,duration_days,price,description,id]
+    );
+
+    res.json(rows[0]);
+
+  }catch(err){
+
+    console.error(err);
+
+    res.status(500).json({
+      error:"Error actualizando plan"
+    });
+
+  }
+
+};
