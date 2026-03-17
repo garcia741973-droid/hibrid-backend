@@ -63,5 +63,5 @@ app.use('/', membershipRoutes);
 const storeRoutes = require('./modules/store/storeRoutes.cjs');
 app.use('/store', storeRoutes);
 
-const cashRoutes = require('./routes/cash');
+const cashRoutes = require('./routes/cash.cjs');
 app.use('/cash', cashRoutes);
