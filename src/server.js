@@ -69,3 +69,7 @@ app.use('/cash', cashRoutes);
 const adminExpenseCategoriesRoutes = require('./routes/adminExpenseCategories.cjs');
 
 app.use('/admin', adminExpenseCategoriesRoutes);
+
+const adminPaymentQrRoutes = require('./routes/adminPaymentQr.cjs');
+
+app.use('/admin', adminPaymentQrRoutes);
