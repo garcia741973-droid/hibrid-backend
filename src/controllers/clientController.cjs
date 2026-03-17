@@ -97,11 +97,20 @@ exports.requestMembership = async (req, res) => {
 
     }
 
-    const {
-      plan_id,
-      start_date,
-      payment_proof_url
-    } = req.body;
+    const plan_id = parseInt(req.body.plan_id);
+    const start_date = req.body.start_date;
+
+    // 🔥 imagen subida por multer
+    const payment_proof_url = req.file?.path || null;
+
+    console.log("BODY:", req.body);
+    console.log("FILE:", req.file);
+
+      if (!plan_id) {
+    return res.status(400).json({
+      error: "Plan inválido"
+    });
+  }
 
     const planResult = await pool.query(
       `SELECT duration_days FROM plans WHERE id=$1`,
