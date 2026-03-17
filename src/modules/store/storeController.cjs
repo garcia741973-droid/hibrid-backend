@@ -397,9 +397,13 @@ exports.getProductHistory = async (req, res) => {
         totalCost += (r.quantity * (r.cost_price || 0));
       }
 
-      if(r.type === 'OUT'){
+        if(r.type === 'OUT'){
         stock -= r.quantity;
-      }
+
+        /// 🔥 reducir costo proporcional
+        const avg = stock > 0 ? totalCost / (stock + r.quantity) : 0;
+        totalCost -= avg * r.quantity;
+        }
 
       return {
         ...r,
