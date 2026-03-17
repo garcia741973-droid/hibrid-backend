@@ -19,12 +19,11 @@ router.put('/products/:id', requireAdmin, storeController.updateProduct);
 
 router.post(
   '/upload-image',
+  requireAuth,
   requireAdmin,
   storeController.uploadMiddleware,
   storeController.uploadImage
 );
-
-router.post('/upload-image', requireAdmin, storeController.uploadImage);
 
 /// VENTAS
 
