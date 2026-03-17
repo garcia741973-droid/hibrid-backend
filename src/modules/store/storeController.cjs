@@ -116,14 +116,25 @@ exports.createSale = async (req,res)=>{
         [saleId,item.product_id,item.quantity,item.unit_price,subtotal]
       );
 
-      await client.query(
+        /// DESCUENTA STOCK
+        await client.query(
         `
         UPDATE products
         SET stock = stock - $1
         WHERE id=$2
         `,
         [item.quantity,item.product_id]
-      );
+        );
+
+        /// 🔥 REGISTRAR SALIDA (VENTA)
+        await client.query(
+        `
+        INSERT INTO stock_movements
+        (product_id, type, quantity, staff_id)
+        VALUES ($1, 'OUT', $2, $3)
+        `,
+        [item.product_id, item.quantity, staffId]
+        );
 
     }
 
