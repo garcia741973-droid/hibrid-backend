@@ -101,7 +101,7 @@ exports.requestMembership = async (req, res) => {
     const start_date = req.body.start_date;
 
     // 🔥 imagen subida por multer
-    const payment_proof_url = req.file?.path || null;
+    const payment_proof_url = req.body.payment_proof_url || null;
 
     console.log("BODY:", req.body);
     console.log("FILE:", req.file);
