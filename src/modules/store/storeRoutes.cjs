@@ -17,13 +17,6 @@ router.post('/products', requireAdmin, storeController.createProduct);
 
 router.put('/products/:id', requireAdmin, storeController.updateProduct);
 
-router.post(
-  '/upload-image',
-  requireAuth,
-  requireAdmin,
-  storeController.uploadMiddleware,
-  storeController.uploadImage
-);
 
 /// VENTAS
 
