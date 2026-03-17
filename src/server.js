@@ -65,3 +65,7 @@ app.use('/store', storeRoutes);
 
 const cashRoutes = require('./routes/cash.cjs');
 app.use('/cash', cashRoutes);
+
+const adminExpenseCategoriesRoutes = require('./routes/adminExpenseCategories.cjs');
+
+app.use('/admin', adminExpenseCategoriesRoutes);
