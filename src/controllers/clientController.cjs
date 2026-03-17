@@ -87,13 +87,30 @@ exports.requestMembership = async (req, res) => {
 
       const end = activeCheck.rows[0].membership_end;
 
-      if(end && new Date(end) > new Date()){
+    // 🔥 validar superposición real de fechas
 
-        return res.status(400).json({
-          error: "El cliente ya tiene una membresía activa"
-        });
+    const overlapCheck = await pool.query(
+      `
+      SELECT id
+      FROM membership_requests
+      WHERE user_id = $1
+      AND status IN ('pending','approved')
+      AND (
+        (start_date <= $2 AND end_date >= $2)
+        OR
+        (start_date <= $3 AND end_date >= $3)
+        OR
+        ($2 <= start_date AND $3 >= end_date)
+      )
+      `,
+      [user_id, start_date, end_date]
+    );
 
-      }
+    if (overlapCheck.rows.length > 0) {
+      return res.status(400).json({
+        error: "Ya existe una membresía en ese rango de fechas"
+      });
+    }
 
     }
 
