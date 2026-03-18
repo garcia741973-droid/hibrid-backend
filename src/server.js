@@ -74,7 +74,9 @@ const adminPaymentQrRoutes = require('./routes/adminPaymentQr.cjs');
 
 app.use('/admin', adminPaymentQrRoutes);
 
-app.post("/users/save-fcm-token", async (req, res) => {
+const requireAuth = require("./middlewares/requireAuth"); // 👈 arriba del archivo
+
+app.post("/users/save-fcm-token", requireAuth, async (req, res) => {
 
   try {
 
