@@ -73,3 +73,24 @@ app.use('/admin', adminExpenseCategoriesRoutes);
 const adminPaymentQrRoutes = require('./routes/adminPaymentQr.cjs');
 
 app.use('/admin', adminPaymentQrRoutes);
+
+app.post("/users/save-fcm-token", async (req, res) => {
+
+  try {
+
+    const { token } = req.body;
+
+    const userId = req.user.id; // 👈 viene del middleware
+
+    await pool.query(
+      "UPDATE users SET fcm_token = $1 WHERE id = $2",
+      [token, userId]
+    );
+
+    res.json({ success: true });
+
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+
+});
