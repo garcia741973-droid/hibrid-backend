@@ -91,6 +91,9 @@ exports.approveMembership = async (req,res)=>{
        [endDate,req.user.id,request_id]
     );
 
+console.log("🔥 APROBANDO MEMBRESIA:", request_id);
+console.log("💰 PRICE:", request.price);
+
     // 💰 REGISTRAR INGRESO EN CAJA (MEMBRESÍA)
     await pool.query(
       `
