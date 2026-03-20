@@ -101,8 +101,15 @@ router.get('/report', requireAuth, async (req, res) => {
     let expense = 0;
 
     result.rows.forEach(r => {
-      if (r.type === 'income') income = Number(r.total);
-      if (r.type === 'expense') expense = Number(r.total);
+
+      if (r.type === 'income' || r.type === 'IN') {
+        income += Number(r.total);
+      }
+
+      if (r.type === 'expense' || r.type === 'OUT') {
+        expense += Number(r.total);
+      }
+
     });
 
     res.json({
