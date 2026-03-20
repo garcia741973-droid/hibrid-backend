@@ -13,7 +13,7 @@ const requireAdmin = requireAdminModule.default || requireAdminModule;
 
 router.get('/products', requireAuth, storeController.getProducts);
 
-router.post('/products', requireAdmin, storeController.createProduct);
+router.post('/products', requireAuth, requireAdmin, storeController.createProduct);
 
 router.put('/products/:id', requireAuth, requireAdmin, storeController.updateProduct);
 
