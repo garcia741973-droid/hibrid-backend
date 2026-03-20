@@ -6,7 +6,7 @@ exports.getProducts = async (req, res) => {
   try {
 
     const { rows } = await pool.query(`
-      SELECT id,name,price,stock,image_url
+      SELECT id,name,description,price,stock,image_url
       FROM products
       WHERE is_active = true
       ORDER BY name
