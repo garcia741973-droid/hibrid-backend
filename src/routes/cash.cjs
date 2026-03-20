@@ -91,7 +91,8 @@ router.get('/report', requireAuth, async (req, res) => {
         COALESCE(SUM(amount),0) as total,
         COUNT(*) as movements
       FROM cash_movements
-      WHERE created_at BETWEEN $1 AND $2
+      WHERE created_at >= $1
+      AND created_at <= $2 + interval '1 day'
       GROUP BY type
       `,
       [from, to]
