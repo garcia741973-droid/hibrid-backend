@@ -53,12 +53,18 @@ exports.createProduct = async (req, res) => {
 
     res.json(rows[0]);
 
-  } catch (err) {
+  } 
+  
+  catch (err) {
 
-    res.status(500).json({ error: 'Error creando producto' });
+  console.error("🔥 CREATE PRODUCT ERROR REAL:", err);
 
-  }
+  res.status(500).json({
+    error: 'Error creando producto',
+    details: err.message
+  });
 
+}
 };
 
 exports.createSale = async (req,res)=>{
