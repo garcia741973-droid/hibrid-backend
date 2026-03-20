@@ -11,10 +11,10 @@ exports.createQr = async (req, res) => {
     } = req.body;
 
     /// 1. Desactivar todos
-    await pool.query(`
-      UPDATE gym_payment_qr
-      SET is_active = false
-    `);
+//    await pool.query(`
+//      UPDATE gym_payment_qr
+//      SET is_active = false
+//    `);
 
     /// 2. Crear nuevo
     const { rows } = await pool.query(
@@ -25,7 +25,7 @@ exports.createQr = async (req, res) => {
         valid_until,
         is_active
       )
-      VALUES ($1,$2,$3,true)
+      VALUES ($1,$2,$3,false)
       RETURNING *
       `,
       [qr_image_url, valid_from, valid_until]
