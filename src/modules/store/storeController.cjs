@@ -48,7 +48,7 @@ exports.createProduct = async (req, res) => {
       VALUES ($1,$2,$3,$4,$5,$6)
       RETURNING *
       `,
-      [name, description, cost_price, price, stock, image_url]
+      [name, description || '', cost_price, price, stock, image_url]
     );
 
     res.json(rows[0]);
