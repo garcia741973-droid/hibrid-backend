@@ -11,6 +11,7 @@ exports.getRequests = async (req,res)=>{
     u.name,
     u.last_name,
     p.name as plan,
+    p.price,
     mr.start_date,
     mr.end_date,
     mr.payment_proof_url,
