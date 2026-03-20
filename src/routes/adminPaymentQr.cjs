@@ -30,4 +30,10 @@ router.get('/payment-qr-active',
   controller.getActiveQr
 );
 
+router.get('/payment-qrs/expiring',
+  requireAuth,
+  requireRole(["admin","superadmin"]),
+  controller.checkQrExpiring
+);
+
 module.exports = router;

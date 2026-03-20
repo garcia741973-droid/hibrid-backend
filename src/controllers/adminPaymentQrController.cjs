@@ -124,3 +124,34 @@ exports.getActiveQr = async (req, res) => {
     });
   }
 };
+
+/// 🔔 VERIFICAR QR POR VENCER
+exports.checkQrExpiring = async (req, res) => {
+  try {
+
+    const { rows } = await pool.query(
+      `
+      SELECT *
+      FROM gym_payment_qr
+      WHERE is_active = true
+      AND valid_until IS NOT NULL
+      AND valid_until <= NOW() + INTERVAL '3 days'
+      LIMIT 1
+      `
+    );
+
+    if (rows.length === 0) {
+      return res.json({ expiring: false });
+    }
+
+    res.json({
+      expiring: true,
+      qr: rows[0]
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      error: "Error verificando QR"
+    });
+  }
+};
