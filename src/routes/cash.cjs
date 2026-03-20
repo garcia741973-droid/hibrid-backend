@@ -142,7 +142,7 @@ router.get('/movements', requireAuth, async (req, res) => {
     const params = [];
 
     if (from && to) {
-      query += ` WHERE cm.created_at BETWEEN $1 AND $2`;
+      query += ` WHERE DATE(cm.created_at) BETWEEN DATE($1) AND DATE($2)`;
       params.push(from, to);
     }
 
