@@ -26,32 +26,4 @@ router.get(
 
 router.get('/my-qr', requireAuth, controller.getMyQr);
 
-
-const jwt = require("jsonwebtoken");
-
-exports.getMyQr = async (req, res) => {
-  try {
-
-    const userId = req.user.id;
-
-    /// 🔥 TOKEN DE 5 MINUTOS
-    const token = jwt.sign(
-      { user_id: userId },
-      process.env.JWT_SECRET,
-      { expiresIn: "5m" }
-    );
-
-    res.json({
-      qr: token
-    });
-
-  } catch (err) {
-
-    res.status(500).json({
-      error: "Error generando QR"
-    });
-
-  }
-};
-
 module.exports = router;

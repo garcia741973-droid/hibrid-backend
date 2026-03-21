@@ -292,3 +292,34 @@ exports.getMembershipHistory = async (req, res) => {
   }
 
 };
+
+// =============================
+// GENERAR QR DINÁMICO (5 MIN)
+// =============================
+const jwt = require("jsonwebtoken");
+
+exports.getMyQr = async (req, res) => {
+  try {
+
+    const userId = req.user.id;
+
+    const token = jwt.sign(
+      { user_id: userId },
+      process.env.JWT_SECRET,
+      { expiresIn: "5m" }
+    );
+
+    res.json({
+      qr: token
+    });
+
+  } catch (err) {
+
+    console.error(err);
+
+    res.status(500).json({
+      error: "Error generando QR"
+    });
+
+  }
+};
