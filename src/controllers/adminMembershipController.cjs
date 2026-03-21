@@ -126,65 +126,93 @@ console.log("💰 PRICE:", request.price);
 
 };
 
-  exports.validateQr = async (req,res)=>{
+const jwt = require("jsonwebtoken");
 
-    try{
+exports.validateQr = async (req, res) => {
 
-      const {qr_code} = req.body;
+  try {
 
-      const result = await pool.query(
-        `SELECT name,last_name,photo_url,membership_end
-        FROM users
-        WHERE qr_code=$1`,
-        [qr_code]
-      );
+    const { qrCode } = req.body;
 
-      if(result.rows.length===0){
-        return res.status(404).json({
-          error:"Usuario no encontrado"
-        });
-      }
-
-      const user = result.rows[0];
-
-      const now = new Date();
-      const end = user.membership_end ? new Date(user.membership_end) : null;
-
-      if(!end){
-        return res.status(403).json({
-          error:"Cliente sin membresía activa",
-          client:{
-            name:`${user.name} ${user.last_name}`,
-            photo:user.photo_url
-          }
-        });
-      }
-
-      if(end < now){
-        return res.status(403).json({
-          error:"Membresía vencida",
-          client:{
-            name:`${user.name} ${user.last_name}`,
-            photo:user.photo_url,
-            membership_end:user.membership_end
-          }
-        });
-      }
-
-      res.json({
-        message:"Acceso permitido",
-        client:{
-          name:`${user.name} ${user.last_name}`,
-          photo:user.photo_url,
-          membership_end:user.membership_end
-        }
+    if (!qrCode) {
+      return res.status(400).json({
+        error: "QR requerido"
       });
-
-    }catch(err){
-
-      console.error(err);
-      res.status(500).json({error:"Error validando QR"});
-
     }
 
-  };
+    /// 🔥 VALIDAR TOKEN (5 min)
+    let decoded;
+
+    try {
+      decoded = jwt.verify(qrCode, process.env.JWT_SECRET);
+    } catch (err) {
+      return res.status(401).json({
+        error: "QR inválido o expirado"
+      });
+    }
+
+    const userId = decoded.user_id;
+
+    /// 🔍 TRAER USUARIO
+    const result = await pool.query(
+      `
+      SELECT name, last_name, photo_url, membership_end
+      FROM users
+      WHERE id = $1
+      `,
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        error: "Usuario no encontrado"
+      });
+    }
+
+    const user = result.rows[0];
+
+    const now = new Date();
+    const end = user.membership_end ? new Date(user.membership_end) : null;
+
+    if (!end) {
+      return res.status(403).json({
+        error: "Cliente sin membresía activa",
+        client: {
+          name: `${user.name} ${user.last_name}`,
+          photo: user.photo_url
+        }
+      });
+    }
+
+    if (end < now) {
+      return res.status(403).json({
+        error: "Membresía vencida",
+        client: {
+          name: `${user.name} ${user.last_name}`,
+          photo: user.photo_url,
+          membership_end: user.membership_end
+        }
+      });
+    }
+
+    /// ✅ TODO OK
+    res.json({
+      message: "Acceso permitido",
+      client: {
+        name: `${user.name} ${user.last_name}`,
+        photo: user.photo_url,
+        membership_end: user.membership_end
+      }
+    });
+
+  } catch (err) {
+
+    console.error(err);
+
+    res.status(500).json({
+      error: "Error validando QR"
+    });
+
+  }
+
+};
