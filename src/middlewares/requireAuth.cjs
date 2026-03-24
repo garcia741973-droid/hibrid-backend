@@ -1,6 +1,7 @@
 const jwt = require("jsonwebtoken");
+const { pool } = require("../config/db");
 
-module.exports = (req, res, next) => {
+module.exports = async (req, res, next) => {
 
   const authHeader =
     req.headers['authorization'] ||
@@ -17,16 +18,11 @@ module.exports = (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // 🔥 VALIDACIÓN MULTIEMPRESA
-    if (!decoded.company_id) {
-      return res.status(401).json({ error: "Token inválido (sin empresa)" });
-    }
-
-    req.user = decoded;
-
-    const { pool } = require("../config/db");
-
     if (decoded.role !== 'superadmin') {
+
+      if (!decoded.company_id) {
+        return res.status(401).json({ error: "Token inválido (sin empresa)" });
+      }
 
       const result = await pool.query(
         `SELECT subscription_status FROM companies WHERE id = $1`,
@@ -46,7 +42,9 @@ module.exports = (req, res, next) => {
           error: "Suscripción vencida"
         });
       }
-    }    
+    }
+
+    req.user = decoded;
 
     next();
 
