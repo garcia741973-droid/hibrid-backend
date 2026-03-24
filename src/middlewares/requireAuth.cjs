@@ -24,6 +24,30 @@ module.exports = (req, res, next) => {
 
     req.user = decoded;
 
+    const { pool } = require("../config/db");
+
+    if (decoded.role !== 'superadmin') {
+
+      const result = await pool.query(
+        `SELECT subscription_status FROM companies WHERE id = $1`,
+        [decoded.company_id]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(403).json({
+          error: "Empresa no encontrada"
+        });
+      }
+
+      const company = result.rows[0];
+
+      if (company.subscription_status !== 'active') {
+        return res.status(403).json({
+          error: "Suscripción vencida"
+        });
+      }
+    }    
+
     next();
 
   } catch (error) {
