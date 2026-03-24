@@ -2,10 +2,10 @@ const jwt = require("jsonwebtoken");
 
 module.exports = (req, res, next) => {
 
-const authHeader =
-  req.headers['authorization'] ||
-  req.headers['Authorization'] ||
-  req.get('Authorization');
+  const authHeader =
+    req.headers['authorization'] ||
+    req.headers['Authorization'] ||
+    req.get('Authorization');
 
   if (!authHeader) {
     return res.status(401).json({ error: "Token requerido" });
@@ -16,6 +16,11 @@ const authHeader =
   try {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // 🔥 VALIDACIÓN MULTIEMPRESA
+    if (!decoded.company_id) {
+      return res.status(401).json({ error: "Token inválido (sin empresa)" });
+    }
 
     req.user = decoded;
 

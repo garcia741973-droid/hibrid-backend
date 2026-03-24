@@ -5,12 +5,17 @@ const { pool } = require('../../config/db');
 exports.getProducts = async (req, res) => {
   try {
 
+    const companyId = req.user.company_id;
+
     const { rows } = await pool.query(`
-      SELECT id,name,description,price,stock,image_url
-      FROM products
-      WHERE is_active = true
-      ORDER BY name
-    `);
+    SELECT id,name,description,price,stock,image_url
+    FROM products
+    WHERE is_active = true
+    AND company_id = $1
+    ORDER BY name
+    `,
+    [companyId]
+    );
 
     res.json(rows);
 
@@ -41,14 +46,16 @@ exports.createProduct = async (req, res) => {
       image_url
     } = req.body;
 
+    const companyId = req.user.company_id;
+
     const { rows } = await pool.query(
       `
       INSERT INTO products
-      (name,description,cost_price,price,stock,image_url)
-      VALUES ($1,$2,$3,$4,$5,$6)
+      (name,description,cost_price,price,stock,image_url,company_id)
+      VALUES ($1,$2,$3,$4,$5,$6,$7)
       RETURNING *
       `,
-      [name, description || '', cost_price, price, stock, image_url]
+      [name, description || '', cost_price, price, stock, image_url, companyId]
     );
 
     res.json(rows[0]);
@@ -80,12 +87,18 @@ exports.createSale = async (req,res)=>{
 
     let total = 0;
 
+    const companyId = req.user.company_id;
+
     const sale = await client.query(
-      `INSERT INTO sales (staff_id,total)
-       VALUES ($1,0)
-       RETURNING id`,
-      [staffId]
+      `INSERT INTO sales (staff_id,total,company_id)
+      VALUES ($1,0,$2)
+      RETURNING id`,
+      [staffId, companyId]
     );
+
+    if (!sale.rows[0]) {
+      throw new Error("Error creando venta");
+    }
 
     const saleId = sale.rows[0].id;
 
@@ -93,9 +106,9 @@ exports.createSale = async (req,res)=>{
 
       const product = await client.query(
         `SELECT stock,is_active
-         FROM products
-         WHERE id=$1`,
-        [item.product_id]
+        FROM products
+        WHERE id=$1 AND company_id=$2`,
+        [item.product_id, companyId]
       );
 
       if(product.rows.length===0)
@@ -116,30 +129,37 @@ exports.createSale = async (req,res)=>{
       await client.query(
         `
         INSERT INTO sale_items
-        (sale_id,product_id,quantity,unit_price,subtotal)
-        VALUES ($1,$2,$3,$4,$5)
+        (sale_id,product_id,quantity,unit_price,subtotal,company_id)
+        VALUES ($1,$2,$3,$4,$5,$6)
         `,
-        [saleId,item.product_id,item.quantity,item.unit_price,subtotal]
+        [
+          saleId,
+          item.product_id,
+          item.quantity,
+          item.unit_price,
+          subtotal,
+          companyId
+        ]
       );
 
         /// DESCUENTA STOCK
         await client.query(
-        `
-        UPDATE products
-        SET stock = stock - $1
-        WHERE id=$2
-        `,
-        [item.quantity,item.product_id]
+          `
+          UPDATE products
+          SET stock = stock - $1
+          WHERE id=$2 AND company_id=$3
+          `,
+          [item.quantity, item.product_id, companyId]
         );
 
         /// 🔥 REGISTRAR SALIDA (VENTA)
         await client.query(
-        `
-        INSERT INTO stock_movements
-        (product_id, type, quantity, staff_id)
-        VALUES ($1, 'OUT', $2, $3)
-        `,
-        [item.product_id, item.quantity, staffId]
+          `
+          INSERT INTO stock_movements
+          (product_id, type, quantity, staff_id, company_id)
+          VALUES ($1, 'OUT', $2, $3, $4)
+          `,
+          [item.product_id, item.quantity, staffId, companyId]
         );
 
     }
@@ -148,18 +168,19 @@ exports.createSale = async (req,res)=>{
       `
       UPDATE sales
       SET total=$1
-      WHERE id=$2
+      WHERE id=$2 AND company_id=$3
       `,
-      [total,saleId]
+      [total, saleId, companyId]
     );
+
 
     await client.query(
       `
       INSERT INTO cash_movements
-      (type,reference_type,reference_id,amount,staff_id)
-      VALUES ('income','sale',$1,$2,$3)
+      (type,reference_type,reference_id,amount,staff_id,company_id)
+      VALUES ('income','sale',$1,$2,$3,$4)
       `,
-      [saleId,total,staffId]
+      [saleId, total, staffId, companyId]
     );
 
     await client.query('COMMIT');
@@ -194,14 +215,21 @@ exports.cancelSale = async (req,res)=>{
 
     const saleId = req.params.id;
 
+    const companyId = req.user.company_id;
+
     const items = await client.query(
       `
       SELECT product_id,quantity
       FROM sale_items
-      WHERE sale_id=$1
+      WHERE sale_id=$1 AND company_id=$2
       `,
-      [saleId]
+      [saleId, companyId]
     );
+
+
+      if (items.rows.length === 0) {
+        throw new Error("Venta no encontrada o no autorizada");
+      }    
 
     for(const item of items.rows){
 
@@ -209,10 +237,11 @@ exports.cancelSale = async (req,res)=>{
         `
         UPDATE products
         SET stock = stock + $1
-        WHERE id=$2
+        WHERE id=$2 AND company_id=$3
         `,
-        [item.quantity,item.product_id]
+        [item.quantity, item.product_id, companyId]
       );
+  
 
     }
 
@@ -220,9 +249,9 @@ exports.cancelSale = async (req,res)=>{
       `
       UPDATE sales
       SET status='cancelled'
-      WHERE id=$1
+      WHERE id=$1 AND company_id=$2
       `,
-      [saleId]
+      [saleId, companyId]
     );
 
     await client.query('COMMIT');
@@ -264,6 +293,8 @@ exports.updateProduct = async (req, res) => {
       image_url
     });
 
+    const companyId = req.user.company_id;
+
     const { rows } = await pool.query(
       `
       UPDATE products
@@ -273,7 +304,7 @@ exports.updateProduct = async (req, res) => {
         price = $3,
         stock = $4,
         image_url = $5
-      WHERE id = $6
+      WHERE id = $6 AND company_id = $7
       RETURNING *
       `,
       [
@@ -282,9 +313,16 @@ exports.updateProduct = async (req, res) => {
         price,
         stock,
         image_url,
-        id
+        id,
+        companyId
       ]
     );
+
+    if (rows.length === 0) {
+      return res.status(404).json({
+        error: "Producto no encontrado o no autorizado"
+      });
+    }
 
     res.json(rows[0]);
 
@@ -311,11 +349,12 @@ exports.addStock = async (req, res) => {
 
     const { product_id, quantity, cost_price } = req.body;
     const staffId = req.user.id;
+    const companyId = req.user.company_id;
 
     /// 1. VALIDAR PRODUCTO
     const product = await client.query(
-      `SELECT stock FROM products WHERE id=$1`,
-      [product_id]
+      `SELECT stock FROM products WHERE id=$1 AND company_id=$2`,
+      [product_id, companyId]
     );
 
     if(product.rows.length === 0){
@@ -327,29 +366,29 @@ exports.addStock = async (req, res) => {
       `
       UPDATE products
       SET stock = stock + $1
-      WHERE id = $2
+      WHERE id = $2 AND company_id=$3
       `,
-      [quantity, product_id]
+      [quantity, product_id, companyId]
     );
 
     /// 3. REGISTRAR MOVIMIENTO
     await client.query(
       `
       INSERT INTO stock_movements
-      (product_id, type, quantity, cost_price, staff_id)
-      VALUES ($1, 'IN', $2, $3, $4)
+      (product_id, type, quantity, cost_price, staff_id, company_id)
+      VALUES ($1, 'IN', $2, $3, $4, $5)
       `,
-      [product_id, quantity, cost_price, staffId]
+      [product_id, quantity, cost_price, staffId, companyId]
     );
 
     /// 4. REGISTRAR EGRESO (IMPORTANTE 💰)
     await client.query(
       `
       INSERT INTO cash_movements
-      (type, reference_type, reference_id, amount, staff_id)
-      VALUES ('expense', 'stock', $1, $2, $3)
+      (type, reference_type, reference_id, amount, staff_id, company_id)
+      VALUES ('expense', 'stock', $1, $2, $3, $4)
       `,
-      [product_id, quantity * cost_price, staffId]
+      [product_id, quantity * cost_price, staffId, companyId]
     );
 
     await client.query('COMMIT');
@@ -376,6 +415,8 @@ exports.getProductHistory = async (req, res) => {
 
     const { id } = req.params;
 
+    const companyId = req.user.company_id;
+
     const { rows } = await pool.query(
       `
       SELECT 
@@ -388,9 +429,10 @@ exports.getProductHistory = async (req, res) => {
       FROM stock_movements sm
       LEFT JOIN users u ON u.id = sm.staff_id
       WHERE sm.product_id = $1
+      AND sm.company_id = $2
       ORDER BY sm.created_at ASC
       `,
-      [id]
+      [id, companyId]
     );
 
     let stock = 0;
