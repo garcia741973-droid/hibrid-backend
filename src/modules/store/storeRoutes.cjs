@@ -24,7 +24,12 @@ router.post('/sales', requireAuth, storeController.createSale);
 
 /// CANCELAR VENTA
 
-router.put('/sales/:id/cancel', requireAdmin, storeController.cancelSale);
+router.put(
+  '/sales/:id/cancel',
+  requireAuth,        // 🔥 FALTABA
+  requireAdmin,
+  storeController.cancelSale
+);
 
 router.post(
   '/stock/add',
