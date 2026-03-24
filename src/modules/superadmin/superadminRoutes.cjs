@@ -20,4 +20,11 @@ router.get(
   controller.getCompanies
 );
 
+router.post(
+  '/create-admin',
+  requireAuth,
+  requireRole(['superadmin']),
+  controller.createAdmin
+);
+
 module.exports = router;
