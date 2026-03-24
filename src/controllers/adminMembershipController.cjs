@@ -1,9 +1,13 @@
 const { pool } = require('../config/db');
 
-// ver solicitudes
+// =============================
+// VER SOLICITUDES
+// =============================
 exports.getRequests = async (req,res)=>{
 
   try{
+
+  const companyId = req.user.company_id;
 
   const {rows} = await pool.query(
     `SELECT
@@ -20,7 +24,9 @@ exports.getRequests = async (req,res)=>{
     JOIN users u ON mr.user_id=u.id
     JOIN plans p ON mr.plan_id=p.id
     WHERE mr.status = 'pending'
-    ORDER BY mr.created_at DESC`
+    AND mr.company_id = $1
+    ORDER BY mr.created_at DESC`,
+    [companyId]
   );
 
     res.json(rows);
@@ -33,23 +39,26 @@ exports.getRequests = async (req,res)=>{
 };
 
 
-// aprobar membresía
+// =============================
+// APROBAR MEMBRESÍA
+// =============================
 exports.approveMembership = async (req,res)=>{
 
   try{
 
     const request_id = req.params.id;
+    const companyId = req.user.company_id;
 
     const result = await pool.query(
       `SELECT mr.*, p.duration_days, p.price
        FROM membership_requests mr
        JOIN plans p ON mr.plan_id = p.id
-       WHERE mr.id=$1`,
-      [request_id]
+       WHERE mr.id=$1 AND mr.company_id=$2`,
+      [request_id, companyId]
     );
 
     if(result.rows.length===0){
-      return res.status(404).json({error:"Solicitud no encontrada"});
+      return res.status(404).json({error:"Solicitud no encontrada o no autorizada"});
     }
 
     const request = result.rows[0];
@@ -60,7 +69,6 @@ exports.approveMembership = async (req,res)=>{
     today.setHours(0,0,0,0);
     startDate.setHours(0,0,0,0);
 
-    // VALIDACIÓN IMPORTANTE
     if(startDate < today){
       return res.status(400).json({
         error:"La fecha de inicio no puede ser anterior a hoy"
@@ -70,44 +78,52 @@ exports.approveMembership = async (req,res)=>{
     const endDate = new Date(startDate);
     endDate.setDate(endDate.getDate() + request.duration_days);
 
-    await pool.query(
+    // 🔥 ACTUALIZAR USUARIO (con seguridad)
+    const updateUser = await pool.query(
       `UPDATE users
        SET membership_start=$1,
            membership_end=$2
-       WHERE id=$3`,
+       WHERE id=$3 AND company_id=$4`,
        [
         startDate,
         endDate,
-        request.user_id
+        request.user_id,
+        companyId
        ]
     );
 
+    if(updateUser.rowCount === 0){
+      throw new Error("Usuario no autorizado");
+    }
+
+    // 🔥 ACTUALIZAR REQUEST
     await pool.query(
       `UPDATE membership_requests
        SET status='approved',
            end_date=$1,
            approved_by=$2,
            approved_at=NOW()
-       WHERE id=$3`,
-       [endDate,req.user.id,request_id]
+       WHERE id=$3 AND company_id=$4`,
+       [endDate, req.user.id, request_id, companyId]
     );
 
-console.log("🔥 APROBANDO MEMBRESIA:", request_id);
-console.log("💰 PRICE:", request.price);
+    console.log("🔥 APROBANDO MEMBRESIA:", request_id);
+    console.log("💰 PRICE:", request.price);
 
-    // 💰 REGISTRAR INGRESO EN CAJA (MEMBRESÍA)
+    // 💰 REGISTRAR INGRESO (CON EMPRESA)
     await pool.query(
       `
       INSERT INTO cash_movements
-      (type, reference_type, reference_id, amount, staff_id, description, created_by_role)
-      VALUES ('income', 'membership', $1, $2, $3, $4, $5)
+      (type, reference_type, reference_id, amount, staff_id, description, created_by_role, company_id)
+      VALUES ('income', 'membership', $1, $2, $3, $4, $5, $6)
       `,
       [
-        request_id,                 // referencia a membership_request
-        request.price,              // 💰 monto del plan
+        request_id,
+        request.price,
         req.user.id,
         'Pago de membresía',
-        req.user.role
+        req.user.role,
+        companyId
       ]
     );    
 
@@ -126,6 +142,10 @@ console.log("💰 PRICE:", request.price);
 
 };
 
+
+// =============================
+// VALIDAR QR
+// =============================
 const jwt = require("jsonwebtoken");
 
 exports.validateQr = async (req, res) => {
@@ -140,7 +160,6 @@ exports.validateQr = async (req, res) => {
       });
     }
 
-    /// 🔥 VALIDAR TOKEN (5 min)
     let decoded;
 
     try {
@@ -152,15 +171,23 @@ exports.validateQr = async (req, res) => {
     }
 
     const userId = decoded.user_id;
+    const qrCompanyId = decoded.company_id;
+    const companyId = req.user.company_id;
 
-    /// 🔍 TRAER USUARIO
+    // 🔥 VALIDAR QUE EL QR SEA DE LA MISMA EMPRESA
+    if(qrCompanyId !== companyId){
+      return res.status(403).json({
+        error: "QR no pertenece a esta empresa"
+      });
+    }
+
     const result = await pool.query(
       `
       SELECT name, last_name, photo_url, membership_end
       FROM users
-      WHERE id = $1
+      WHERE id = $1 AND company_id = $2
       `,
-      [userId]
+      [userId, companyId]
     );
 
     if (result.rows.length === 0) {
@@ -195,7 +222,6 @@ exports.validateQr = async (req, res) => {
       });
     }
 
-    /// ✅ TODO OK
     res.json({
       message: "Acceso permitido",
       client: {
