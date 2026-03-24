@@ -18,10 +18,13 @@ module.exports = async (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
+    // 🔥 VALIDACIÓN MULTIEMPRESA
     if (decoded.role !== 'superadmin') {
 
       if (!decoded.company_id) {
-        return res.status(401).json({ error: "Token inválido (sin empresa)" });
+        return res.status(401).json({
+          error: "Token inválido (sin empresa)"
+        });
       }
 
       const result = await pool.query(
@@ -52,7 +55,7 @@ module.exports = async (req, res, next) => {
 
     console.error("JWT ERROR:", error);
 
-    res.status(401).json({ error: "Token inválido" });
+    return res.status(401).json({ error: "Token inválido" });
 
   }
 
