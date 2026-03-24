@@ -1,4 +1,4 @@
-const { pool } = require('../config/db.cj');
+const { pool } = require('../config/db');
 
 exports.createMembershipRequest = async (req, res) => {
 
