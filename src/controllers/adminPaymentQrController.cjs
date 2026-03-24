@@ -1,4 +1,4 @@
-const { pool } = require('../config/db');
+const { pool } = require('../config/db.cjs');
 
 /// 🔹 CREAR QR
 exports.createQr = async (req, res) => {
