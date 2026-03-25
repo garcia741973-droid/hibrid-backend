@@ -41,4 +41,10 @@ router.post(
   controller.createPlan
 );
 
+router.get(
+  '/company/status',
+  requireAuth,
+  controller.getCompanyStatus
+);
+
 module.exports = router;

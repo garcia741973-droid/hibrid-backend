@@ -252,4 +252,32 @@ exports.createPlan = async (req, res) => {
   }
 };
 
+exports.getCompanyStatus = async (req, res) => {
+  try {
+
+    const companyId = req.user.company_id;
+
+    const { rows } = await pool.query(
+      `
+      SELECT 
+        c.name,
+        c.subscription_status,
+        c.expiration_date,
+        p.name AS plan_name
+      FROM companies c
+      LEFT JOIN company_plans p ON c.plan_id = p.id
+      WHERE c.id = $1
+      `,
+      [companyId]
+    );
+
+    res.json(rows[0]);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      error: "Error obteniendo estado"
+    });
+  }
+};
 
