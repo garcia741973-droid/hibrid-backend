@@ -255,7 +255,8 @@ exports.createPlan = async (req, res) => {
 exports.getCompanyStatus = async (req, res) => {
   try {
 
-    const companyId = req.user.company_id;
+    // 🔥 FIX CLAVE
+    const companyId = req.user.company_id || 1;
 
     const { rows } = await pool.query(
       `
@@ -270,6 +271,13 @@ exports.getCompanyStatus = async (req, res) => {
       `,
       [companyId]
     );
+
+    // 🔥 SEGURIDAD EXTRA
+    if (rows.length === 0) {
+      return res.status(404).json({
+        error: "Empresa no encontrada"
+      });
+    }
 
     res.json(rows[0]);
 
