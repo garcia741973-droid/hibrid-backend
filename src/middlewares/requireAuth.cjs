@@ -18,7 +18,7 @@ module.exports = async (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // 🔥 VALIDACIÓN MULTIEMPRESA
+    // 🔥 MULTIEMPRESA
     if (decoded.role !== 'superadmin') {
 
       if (!decoded.company_id) {
@@ -28,7 +28,11 @@ module.exports = async (req, res, next) => {
       }
 
       const result = await pool.query(
-        `SELECT subscription_status FROM companies WHERE id = $1`,
+        `
+        SELECT subscription_status, expiration_date 
+        FROM companies 
+        WHERE id = $1
+        `,
         [decoded.company_id]
       );
 
@@ -42,12 +46,25 @@ module.exports = async (req, res, next) => {
 
       if (company.subscription_status !== 'active') {
         return res.status(403).json({
-          error: "Suscripción vencida"
+          error: "Suscripción inactiva"
         });
+      }
+
+      if (company.expiration_date) {
+        const today = new Date();
+        const expiration = new Date(company.expiration_date);
+
+        if (expiration < today) {
+          return res.status(403).json({
+            error: "Suscripción expirada"
+          });
+        }
       }
     }
 
     req.user = decoded;
+    req.company_id = decoded.company_id;
+    req.role = decoded.role;
 
     next();
 

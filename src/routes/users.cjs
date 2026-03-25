@@ -1,4 +1,7 @@
-router.post('/admin/create-client', async (req, res) => {
+router.post(
+  '/admin/create-client',
+  requireAuth,
+  async (req, res) => {
 
   try {
 
@@ -13,6 +16,13 @@ router.post('/admin/create-client', async (req, res) => {
       emergency_contact_phone
     } = req.body;
 
+      if (!req.company_id) {
+        return res.status(400).json({
+          error: "Usuario sin empresa"
+        });
+      }
+
+
     const { rows } = await pool.query(
       `
       INSERT INTO users
@@ -26,10 +36,11 @@ router.post('/admin/create-client', async (req, res) => {
         emergency_contact_name,
         emergency_contact_phone,
         role,
+        company_id,
         created_at
       )
       VALUES
-      ($1,$2,$3,$4,$5,$6,$7,$8,'client',NOW())
+      ($1,$2,$3,$4,$5,$6,$7,$8,'client',$9,NOW())
       RETURNING *
       `,
       [
@@ -40,7 +51,8 @@ router.post('/admin/create-client', async (req, res) => {
         gender,
         birth_date,
         emergency_contact_name,
-        emergency_contact_phone
+        emergency_contact_phone,
+        req.user.company_id // 🔥 CLAVE
       ]
     );
 
