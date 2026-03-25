@@ -18,6 +18,8 @@ module.exports = async (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
+console.log("🔐 TOKEN USER:", decoded);
+
     // 🔥 MULTIEMPRESA
     if (decoded.role !== 'superadmin') {
 

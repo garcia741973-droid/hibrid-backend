@@ -255,8 +255,13 @@ exports.createPlan = async (req, res) => {
 exports.getCompanyStatus = async (req, res) => {
   try {
 
-    // 🔥 FIX CLAVE
-    const companyId = req.user.company_id || 1;
+    console.log("🔥 === COMPANY STATUS ===");
+    console.log("USER:", req.user);
+
+    // 🔥 FIX TEMPORAL + LOG
+    const companyId = req.user?.company_id || 1;
+
+    console.log("COMPANY ID USADO:", companyId);
 
     const { rows } = await pool.query(
       `
@@ -272,18 +277,22 @@ exports.getCompanyStatus = async (req, res) => {
       [companyId]
     );
 
-    // 🔥 SEGURIDAD EXTRA
+    console.log("RESULTADO QUERY:", rows);
+
     if (rows.length === 0) {
+      console.log("❌ NO SE ENCONTRÓ EMPRESA");
       return res.status(404).json({
         error: "Empresa no encontrada"
       });
     }
 
-    res.json(rows[0]);
+    console.log("✅ RESPUESTA:", rows[0]);
+
+    return res.json(rows[0]);
 
   } catch (err) {
-    console.error(err);
-    res.status(500).json({
+    console.error("❌ ERROR COMPANY STATUS:", err);
+    return res.status(500).json({
       error: "Error obteniendo estado"
     });
   }
