@@ -27,4 +27,18 @@ router.post(
   controller.createAdmin
 );
 
+router.get(
+  '/plans',
+  requireAuth,
+  requireRole(['superadmin']),
+  controller.getPlans
+);
+
+router.post(
+  '/plans',
+  requireAuth,
+  requireRole(['superadmin']),
+  controller.createPlan
+);
+
 module.exports = router;
