@@ -277,6 +277,8 @@ exports.getCompanyStatus = async (req, res) => {
       [companyId]
     );
 
+
+
     console.log("RESULTADO QUERY:", rows);
 
     if (rows.length === 0) {
@@ -287,6 +289,19 @@ exports.getCompanyStatus = async (req, res) => {
     }
 
     console.log("✅ RESPUESTA:", rows[0]);
+
+    // 🔥 CALCULAR SUSCRIPCIÓN AQUÍ (CLAVE)
+    const today = new Date();
+    const expiration = new Date(rows[0].expiration_date);
+
+    const diffDays = Math.ceil(
+      (expiration - today) / (1000 * 60 * 60 * 24)
+    );
+
+    const subscription = {
+      days_left: diffDays,
+      expired: diffDays < 0
+    };
 
     return res.json(rows[0]);
 
