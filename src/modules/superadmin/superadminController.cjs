@@ -313,3 +313,55 @@ exports.getCompanyStatus = async (req, res) => {
   }
 };
 
+exports.activateCompanyPlan = async (req, res) => {
+  try {
+
+    const { company_id, plan_id } = req.body;
+
+    if (!company_id || !plan_id) {
+      return res.status(400).json({
+        error: "Faltan datos"
+      });
+    }
+
+    // 🔥 obtener duración del plan
+    const plan = await pool.query(
+      `SELECT duration_days FROM company_plans WHERE id = $1`,
+      [plan_id]
+    );
+
+    if (plan.rows.length === 0) {
+      return res.status(400).json({
+        error: "Plan no existe"
+      });
+    }
+
+    const days = plan.rows[0].duration_days;
+
+    // 🔥 nueva expiración
+    const expiration = new Date();
+    expiration.setDate(expiration.getDate() + days);
+
+    // 🔥 actualizar empresa
+    await pool.query(
+      `
+      UPDATE companies
+      SET 
+        plan_id = $1,
+        subscription_status = 'active',
+        expiration_date = $2
+      WHERE id = $3
+      `,
+      [plan_id, expiration, company_id]
+    );
+
+    res.json({ success: true });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      error: "Error activando plan"
+    });
+  }
+};
+

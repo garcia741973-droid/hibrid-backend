@@ -47,4 +47,11 @@ router.get(
   controller.getCompanyStatus
 );
 
+router.post(
+  '/activate-plan',
+  requireAuth,
+  requireRole(['superadmin']),
+  controller.activateCompanyPlan
+);
+
 module.exports = router;
