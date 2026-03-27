@@ -101,9 +101,13 @@ exports.getCompanies = async (req, res) => {
         c.expiration_date,
         c.plan_id,
         c.contact_name,
+        c.contact_phone,
+        c.contact_email,
         c.city,
         c.country,
-        p.name AS plan_name
+        c.address,
+        p.name AS plan_name,
+        p.price AS plan_price
       FROM companies c
       LEFT JOIN company_plans p ON c.plan_id = p.id
       ORDER BY c.created_at DESC
