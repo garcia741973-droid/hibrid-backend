@@ -343,7 +343,30 @@ exports.activateCompanyPlan = async (req, res) => {
     const days = plan.rows[0].duration_days;
 
     // 🔥 nueva expiración
-    const expiration = new Date();
+    // 🔥 obtener empresa actual
+    const companyRes = await pool.query(
+      `SELECT expiration_date FROM companies WHERE id = $1`,
+      [company_id]
+    );
+
+    let baseDate = new Date();
+
+    if (companyRes.rows.length > 0) {
+
+      const currentExpiration = companyRes.rows[0].expiration_date;
+
+      if (currentExpiration) {
+        const expDate = new Date(currentExpiration);
+
+        // 🔥 si aún no venció → acumular tiempo
+        if (expDate > new Date()) {
+          baseDate = expDate;
+        }
+      }
+    }
+
+    // 🔥 nueva expiración acumulada
+    const expiration = new Date(baseDate);
     expiration.setDate(expiration.getDate() + days);
 
     // 🔥 actualizar empresa
