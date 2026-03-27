@@ -365,3 +365,54 @@ exports.activateCompanyPlan = async (req, res) => {
   }
 };
 
+exports.updateCompany = async (req, res) => {
+  try {
+
+    const { id } = req.params;
+
+    const {
+      name,
+      contact_name,
+      contact_phone,
+      contact_email,
+      city,
+      country,
+      type
+    } = req.body;
+
+    const { rows } = await pool.query(
+      `
+      UPDATE companies
+      SET
+        name = COALESCE($1, name),
+        contact_name = COALESCE($2, contact_name),
+        contact_phone = COALESCE($3, contact_phone),
+        contact_email = COALESCE($4, contact_email),
+        city = COALESCE($5, city),
+        country = COALESCE($6, country),
+        type = COALESCE($7, type)
+      WHERE id = $8
+      RETURNING *
+      `,
+      [
+        name,
+        contact_name,
+        contact_phone,
+        contact_email,
+        city,
+        country,
+        type,
+        id
+      ]
+    );
+
+    res.json(rows[0]);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      error: "Error actualizando empresa"
+    });
+  }
+};
+

@@ -54,4 +54,11 @@ router.post(
   controller.activateCompanyPlan
 );
 
+router.put(
+  '/companies/:id',
+  requireAuth,
+  requireRole(['superadmin']),
+  controller.updateCompany
+);
+
 module.exports = router;
