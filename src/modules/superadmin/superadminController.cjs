@@ -377,7 +377,8 @@ exports.updateCompany = async (req, res) => {
       contact_email,
       city,
       country,
-      type
+      type,
+      address
     } = req.body;
 
     const { rows } = await pool.query(
@@ -390,8 +391,9 @@ exports.updateCompany = async (req, res) => {
         contact_email = COALESCE($4, contact_email),
         city = COALESCE($5, city),
         country = COALESCE($6, country),
-        type = COALESCE($7, type)
-      WHERE id = $8
+        type = COALESCE($7, type),
+        address = COALESCE($8, address)
+      WHERE id = $9
       RETURNING *
       `,
       [
@@ -402,6 +404,7 @@ exports.updateCompany = async (req, res) => {
         city,
         country,
         type,
+        address,
         id
       ]
     );
