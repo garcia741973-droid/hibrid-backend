@@ -382,6 +382,23 @@ exports.activateCompanyPlan = async (req, res) => {
       [plan_id, expiration, company_id]
     );
 
+    // 🔥 guardar historial de pago
+    await pool.query(
+      `
+      INSERT INTO company_payments
+      (company_id, plan_id, amount, expiration_date, registered_by)
+      VALUES ($1, $2, $3, $4, $5)
+      `,
+      [
+        company_id,
+        plan_id,
+        plan.rows[0].price || 0,
+        expiration,
+        req.user.id
+      ]
+    );
+
+
     res.json({ success: true });
 
   } catch (err) {
@@ -442,6 +459,37 @@ exports.updateCompany = async (req, res) => {
     console.error(err);
     res.status(500).json({
       error: "Error actualizando empresa"
+    });
+  }
+};
+
+exports.getCompanyPayments = async (req, res) => {
+  try {
+
+    const { id } = req.params;
+
+    const { rows } = await pool.query(
+      `
+      SELECT 
+        cp.id,
+        cp.amount,
+        cp.payment_date,
+        cp.expiration_date,
+        p.name AS plan_name
+      FROM company_payments cp
+      LEFT JOIN company_plans p ON cp.plan_id = p.id
+      WHERE cp.company_id = $1
+      ORDER BY cp.payment_date DESC
+      `,
+      [id]
+    );
+
+    res.json(rows);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      error: "Error obteniendo pagos"
     });
   }
 };
