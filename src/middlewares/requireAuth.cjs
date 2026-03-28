@@ -67,7 +67,7 @@ module.exports = async (req, res, next) => {
     req.user = decoded;
     req.company_id = decoded.company_id;
     req.role = decoded.role;
-
+    req.company_type = decoded.company_type; // 🔥 NUEVO
     next();
 
   } catch (error) {

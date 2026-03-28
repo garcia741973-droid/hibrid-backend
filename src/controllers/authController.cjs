@@ -36,11 +36,17 @@ exports.login = async (req,res)=>{
   const { email,password } = req.body;
 
   const result = await pool.query(
-   `SELECT * FROM users WHERE email=$1`,
-   [email]
+  `
+  SELECT u.*, c.type as company_type
+  FROM users u
+  JOIN companies c ON u.company_id = c.id
+  WHERE u.email = $1
+  `,
+  [email]
   );
 
   const user = result.rows[0];
+  console.log("LOGIN USER:", user);
 
   if(!user){
    return res.status(400).json({error:"Usuario no existe"});
@@ -52,24 +58,26 @@ exports.login = async (req,res)=>{
    return res.status(400).json({error:"Password incorrecto"});
   }
 
-    const token = jwt.sign(
-    {
-    id: user.id,
-    role: user.role,
-    company_id: user.company_id   // 🔥 NUEVO
-    },
-    process.env.JWT_SECRET,
-    { expiresIn: "7d" }
-    );
+  const token = jwt.sign(
+  {
+  id: user.id,
+  role: user.role,
+  company_id: user.company_id,
+  company_type: user.company_type // 🔥 NUEVO
+  },
+  process.env.JWT_SECRET,
+  { expiresIn: "7d" }
+  );
 
   res.json({
-   token,
-   user:{
+  token,
+  user:{
     id:user.id,
     name:user.name,
     role:user.role,
-    company_id: user.company_id   // 🔥 NUEVO
-   }
+    company_id: user.company_id,
+    company_type: user.company_type // 🔥 NUEVO
+  }
   });
 
  }catch(error){
