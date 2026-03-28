@@ -38,6 +38,7 @@ exports.createClient = async (req, res) => {
         emergency_contact_name,
         emergency_contact_phone,
         photo_url,
+        company_id,
         created_at
       )
       VALUES
@@ -54,7 +55,8 @@ exports.createClient = async (req, res) => {
         birth_date,
         emergency_contact_name,
         emergency_contact_phone,
-        photo_url
+        photo_url,
+        req.user.company_id // 🔥 CLAVE
       ]
     );
 
@@ -92,8 +94,8 @@ exports.getClients = async (req, res) => {
 
   try {
 
-    const result = await pool.query(
-      `
+      const result = await pool.query(
+        `
         SELECT
         id,
         name,
@@ -110,9 +112,11 @@ exports.getClients = async (req, res) => {
         qr_code
         FROM users
         WHERE role='client'
+        AND company_id = $1
         ORDER BY id DESC
-      `
-    );
+        `,
+        [req.user.company_id] // 🔥 CLAVE
+      );
 
     res.json(result.rows);
 
@@ -162,7 +166,7 @@ exports.updateClient = async (req,res) => {
         emergency_contact_name=$7,
         emergency_contact_phone=$8,
         photo_url=$9
-      WHERE id=$10
+      WHERE id=$10 AND company_id=$11
       `,
       [
         name,
@@ -174,7 +178,8 @@ exports.updateClient = async (req,res) => {
         emergency_contact_name,
         emergency_contact_phone,
         photo_url,
-        id
+        id,
+        req.user.company_id // 🔥 NUEVO
       ]
     );
 
