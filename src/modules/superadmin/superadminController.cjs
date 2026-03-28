@@ -25,6 +25,16 @@ exports.createCompany = async (req, res) => {
       });
     }
 
+    // 🔥 VALIDAR TYPE (MUY IMPORTANTE)
+    const validTypes = ['gym', 'trainer'];
+
+    if (!validTypes.includes(type)) {
+      return res.status(400).json({
+        error: "Tipo inválido (gym o trainer)"
+      });
+    }
+
+
     // 🔥 VALIDAR PLAN
     const planCheck = await pool.query(
       `SELECT id, duration_days FROM company_plans WHERE id = $1`,
@@ -63,7 +73,7 @@ exports.createCompany = async (req, res) => {
       `,
       [
         name,
-        type,
+        type || 'gym', // 🔥 AQUÍ SÍ VA
         plan_id,
         expiration,
         contact_name || '',
