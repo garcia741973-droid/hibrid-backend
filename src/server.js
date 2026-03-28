@@ -29,6 +29,8 @@ app.use('/admin', adminMembershipRoutes);
 
 app.use('/staff', staffMembershipRoutes);
 
+app.use('/trainer', require('./modules/trainer/trainerRoutes.cjs'));
+
 // ruta test
 app.get("/", async (req, res) => {
   try {
