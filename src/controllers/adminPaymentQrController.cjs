@@ -17,18 +17,21 @@ exports.createQr = async (req, res) => {
 //    `);
 
     /// 2. Crear nuevo
+    const company_id = req.user.company_id;
+
     const { rows } = await pool.query(
       `
       INSERT INTO gym_payment_qr (
         qr_image_url,
         valid_from,
         valid_until,
-        is_active
+        is_active,
+        company_id
       )
-      VALUES ($1,$2,$3,false)
+      VALUES ($1,$2,$3,false,$4)
       RETURNING *
       `,
-      [qr_image_url, valid_from, valid_until]
+      [qr_image_url, valid_from, valid_until, company_id]
     );
 
     res.json(rows[0]);
@@ -46,12 +49,16 @@ exports.createQr = async (req, res) => {
 exports.getQrs = async (req, res) => {
   try {
 
+    const company_id = req.user.company_id;
+
     const { rows } = await pool.query(
       `
       SELECT *
       FROM gym_payment_qr
+      WHERE company_id = $1
       ORDER BY created_at DESC
-      `
+      `,
+      [company_id]
     );
 
     res.json(rows);
@@ -69,20 +76,31 @@ exports.activateQr = async (req, res) => {
   try {
 
     const { id } = req.params;
+    const company_id = req.user.company_id;
 
+    /// 1. Desactivar SOLO los de esta empresa
     await pool.query(`
       UPDATE gym_payment_qr
       SET is_active = false
-    `);
+      WHERE company_id = $1
+    `, [company_id]);
 
-    await pool.query(
+    /// 2. Activar el seleccionado (SOLO de su empresa)
+    const result = await pool.query(
       `
       UPDATE gym_payment_qr
       SET is_active = true
-      WHERE id = $1
+      WHERE id = $1 AND company_id = $2
+      RETURNING id
       `,
-      [id]
+      [id, company_id]
     );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({
+        error: "QR no encontrado o no autorizado"
+      });
+    }
 
     res.json({ ok: true });
 
@@ -98,16 +116,20 @@ exports.activateQr = async (req, res) => {
 exports.getActiveQr = async (req, res) => {
   try {
 
+    const company_id = req.user.company_id;
+
     const { rows } = await pool.query(
       `
       SELECT *
       FROM gym_payment_qr
       WHERE is_active = true
+      AND company_id = $1
       AND (valid_from IS NULL OR NOW() >= valid_from)
       AND (valid_until IS NULL OR NOW() <= valid_until)
       ORDER BY created_at DESC
       LIMIT 1
-      `
+      `,
+      [company_id]
     );
 
     if (rows.length === 0) {
@@ -129,15 +151,19 @@ exports.getActiveQr = async (req, res) => {
 exports.checkQrExpiring = async (req, res) => {
   try {
 
+    const company_id = req.user.company_id;
+
     const { rows } = await pool.query(
       `
       SELECT *
       FROM gym_payment_qr
       WHERE is_active = true
+      AND company_id = $1
       AND valid_until IS NOT NULL
       AND valid_until <= NOW() + INTERVAL '3 days'
       LIMIT 1
-      `
+      `,
+      [company_id]
     );
 
     if (rows.length === 0) {
