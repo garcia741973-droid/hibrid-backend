@@ -285,6 +285,13 @@ exports.approveTrainerPackage = async (req, res) => {
 
     const request = result.rows[0];
 
+    // 🔥 EVITAR DOBLE APROBACIÓN
+    if (request.status === 'approved') {
+    return res.status(400).json({
+        error: "Esta solicitud ya fue aprobada"
+    });
+    }    
+
     // 🔥 2. CREAR PAQUETE DEL CLIENTE
     const pkg = await pool.query(
       `
@@ -366,11 +373,37 @@ exports.createPackageRequest = async (req, res) => {
     const { package_id, payment_proof_url } = req.body;
     const companyId = req.user.company_id;
 
+        // 🔥 EVITAR DUPLICADOS
+        const existing = await pool.query(
+        `
+        SELECT id
+        FROM trainer_package_requests
+        WHERE client_id = $1
+            AND package_id = $2
+            AND status = 'pending'
+            AND company_id = $3
+        `,
+        [req.user.id, package_id, companyId]
+        );
+
+        if (existing.rows.length > 0) {
+        return res.status(400).json({
+            error: "Ya tienes una solicitud pendiente para este paquete"
+        });
+        }    
+
     if (!package_id) {
       return res.status(400).json({
         error: "Paquete requerido"
       });
     }
+
+        // 🔥 SOLO CLIENTES
+        if (req.user.role !== 'client') {
+        return res.status(403).json({
+            error: "Solo clientes pueden comprar paquetes"
+        });
+        }    
 
     const result = await pool.query(
       `
