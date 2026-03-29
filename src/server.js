@@ -109,3 +109,5 @@ app.use('/auth', passwordRecoveryRoutes);
 app.use('/trainer-packages', require('./modules/trainerPackages/trainerPackagesRoutes.cjs'));
 
 app.use('/trainer', require('./modules/trainer/trainerClientsRoutes.cjs'));
+
+app.use('/trainer/sessions', require('./src/routes/trainerSessions.cjs'));
