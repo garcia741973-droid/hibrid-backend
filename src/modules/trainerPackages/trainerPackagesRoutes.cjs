@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 
 const requireAuth = require('../../middlewares/requireAuth.cjs');
+
+// 🔥 IMPORT CORRECTO
 const controller = require('./trainerPackagesController.cjs');
 
 router.post('/', requireAuth, controller.createPackage);

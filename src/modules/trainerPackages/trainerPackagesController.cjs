@@ -1,117 +1,194 @@
 const { pool } = require('../../config/db');
 
-/// CREAR PAQUETE
+// =============================
+// 🔥 CREAR PAQUETE
+// =============================
 exports.createPackage = async (req, res) => {
   try {
+    const { name, sessions_total, price } = req.body;
 
-    const { name, total_sessions, price } = req.body;
+    if (!name || !sessions_total || !price) {
+      return res.status(400).json({
+        error: 'Faltan datos'
+      });
+    }
+
+    if (req.user.company_type !== 'trainer') {
+      return res.status(403).json({
+        error: 'Solo trainer'
+      });
+    }
 
     const { rows } = await pool.query(
       `
       INSERT INTO trainer_packages
-      (name, total_sessions, price, company_id)
+      (company_id, name, sessions_total, price)
       VALUES ($1,$2,$3,$4)
       RETURNING *
       `,
       [
+        req.user.company_id,
         name,
-        total_sessions,
-        price,
-        req.user.company_id
+        sessions_total,
+        price
       ]
     );
 
     res.json(rows[0]);
-
   } catch (err) {
-    res.status(500).json({ error: 'Error creando paquete' });
+    console.error(err);
+    res.status(500).json({
+      error: 'Error creando paquete'
+    });
   }
 };
 
-
-/// LISTAR PAQUETES
+// =============================
+// 🔥 LISTAR PAQUETES
+// =============================
 exports.getPackages = async (req, res) => {
   try {
+    if (req.user.company_type !== 'trainer') {
+      return res.status(403).json({
+        error: 'Solo trainer'
+      });
+    }
 
     const { rows } = await pool.query(
       `
       SELECT *
       FROM trainer_packages
       WHERE company_id = $1
-      AND is_active = true
+      ORDER BY created_at DESC
       `,
       [req.user.company_id]
     );
 
     res.json(rows);
-
   } catch (err) {
-    res.status(500).json({ error: 'Error obteniendo paquetes' });
+    console.error(err);
+    res.status(500).json({
+      error: 'Error obteniendo paquetes'
+    });
   }
 };
 
-
-/// ASIGNAR A CLIENTE
+// =============================
+// 🔥 ASIGNAR PAQUETE A CLIENTE
+// =============================
 exports.assignPackage = async (req, res) => {
+  const client = await pool.connect();
+
   try {
+    await client.query('BEGIN');
 
     const { client_id, package_id } = req.body;
 
-    const pkg = await pool.query(
+    if (!client_id || !package_id) {
+      throw new Error('Faltan datos');
+    }
+
+    if (req.user.company_type !== 'trainer') {
+      throw new Error('Solo trainer');
+    }
+
+    // 🔥 VALIDAR PAQUETE
+    const pkgRes = await client.query(
       `
-      SELECT total_sessions
+      SELECT sessions_total
       FROM trainer_packages
-      WHERE id=$1 AND company_id=$2
+      WHERE id = $1 AND company_id = $2
       `,
       [package_id, req.user.company_id]
     );
 
-    if(pkg.rows.length === 0){
-      return res.status(400).json({ error: 'Paquete no existe' });
+    if (pkgRes.rows.length === 0) {
+      throw new Error('Paquete no existe');
     }
 
-    const total = pkg.rows[0].total_sessions;
+    const pkg = pkgRes.rows[0];
 
-    const { rows } = await pool.query(
+    // 🔥 DESACTIVAR PAQUETES ANTERIORES
+    await client.query(
+      `
+      UPDATE trainer_client_packages
+      SET status = 'cancelled'
+      WHERE client_id = $1
+        AND company_id = $2
+        AND status = 'active'
+      `,
+      [client_id, req.user.company_id]
+    );
+
+    // 🔥 CREAR NUEVO
+    const { rows } = await client.query(
       `
       INSERT INTO trainer_client_packages
-      (client_id, package_id, sessions_total, company_id)
-      VALUES ($1,$2,$3,$4)
+      (
+        company_id,
+        client_id,
+        package_id,
+        sessions_total,
+        sessions_used,
+        status
+      )
+      VALUES ($1,$2,$3,$4,0,'active')
       RETURNING *
       `,
       [
+        req.user.company_id,
         client_id,
         package_id,
-        total,
-        req.user.company_id
+        pkg.sessions_total
       ]
     );
+
+    await client.query('COMMIT');
 
     res.json(rows[0]);
 
   } catch (err) {
-    res.status(500).json({ error: 'Error asignando paquete' });
+
+    await client.query('ROLLBACK');
+
+    res.status(400).json({
+      error: err.message
+    });
+
+  } finally {
+    client.release();
   }
 };
 
-
-/// VER PAQUETES DE CLIENTE
+// =============================
+// 🔥 VER PAQUETES DE CLIENTE
+// =============================
 exports.getClientPackages = async (req, res) => {
   try {
+    const clientId = req.params.id;
+
+    if (req.user.company_type !== 'trainer') {
+      return res.status(403).json({
+        error: 'Solo trainer'
+      });
+    }
 
     const { rows } = await pool.query(
       `
       SELECT *
       FROM trainer_client_packages
       WHERE client_id = $1
-      AND company_id = $2
+        AND company_id = $2
+      ORDER BY created_at DESC
       `,
-      [req.params.id, req.user.company_id]
+      [clientId, req.user.company_id]
     );
 
     res.json(rows);
-
   } catch (err) {
-    res.status(500).json({ error: 'Error obteniendo paquetes' });
+    console.error(err);
+    res.status(500).json({
+      error: 'Error obteniendo paquetes del cliente'
+    });
   }
 };
