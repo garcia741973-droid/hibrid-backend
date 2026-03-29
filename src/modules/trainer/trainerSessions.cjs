@@ -1,4 +1,4 @@
-const { pool } = require('../config/db');
+const { pool } = require('../../config/db');
 
 /// 🔹 CREAR SESIONES
 exports.createSessions = async (req, res) => {
