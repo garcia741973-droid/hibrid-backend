@@ -105,3 +105,5 @@ app.post("/users/save-fcm-token", requireAuth, async (req, res) => {
 
 const passwordRecoveryRoutes = require('./routes/passwordRecovery.cjs');
 app.use('/auth', passwordRecoveryRoutes);
+
+app.use('/trainer-packages', require('./modules/trainerPackages/trainerPackagesRoutes.cjs'));
