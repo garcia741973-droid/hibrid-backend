@@ -12,13 +12,15 @@ exports.createCategory = async (req, res) => {
       });
     }
 
+    const company_id = req.user.company_id;
+
     const { rows } = await pool.query(
       `
-      INSERT INTO expense_categories (name, description)
-      VALUES ($1,$2)
+      INSERT INTO expense_categories (name, description, company_id)
+      VALUES ($1,$2,$3)
       RETURNING *
       `,
-      [name, description || null]
+      [name, description || null, company_id]
     );
 
     res.json(rows[0]);
@@ -36,13 +38,17 @@ exports.createCategory = async (req, res) => {
 exports.getCategories = async (req, res) => {
   try {
 
+    const company_id = req.user.company_id;
+
     const { rows } = await pool.query(
       `
       SELECT *
       FROM expense_categories
       WHERE is_active = true
+      AND company_id = $1
       ORDER BY name ASC
-      `
+      `,
+      [company_id]
     );
 
     res.json(rows);
@@ -62,14 +68,17 @@ exports.toggleCategory = async (req, res) => {
 
     const { id } = req.params;
 
-    await pool.query(
-      `
-      UPDATE expense_categories
-      SET is_active = NOT is_active
-      WHERE id = $1
-      `,
-      [id]
-    );
+const company_id = req.user.company_id;
+
+      await pool.query(
+        `
+        UPDATE expense_categories
+        SET is_active = NOT is_active
+        WHERE id = $1
+        AND company_id = $2
+        `,
+        [id, company_id]
+      );
 
     res.json({ ok: true });
 

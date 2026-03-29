@@ -15,18 +15,21 @@ router.post('/add-expense', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Monto requerido' });
     }
 
+    const company_id = req.user.company_id;
+
     await pool.query(
       `
       INSERT INTO cash_movements
-      (type, reference_type, amount, staff_id, description, category_id, created_by_role)
-      VALUES ('expense', 'manual', $1, $2, $3, $4, $5)
+      (type, reference_type, amount, staff_id, description, category_id, created_by_role, company_id)
+      VALUES ('expense', 'manual', $1, $2, $3, $4, $5, $6)
       `,
       [
         amount,
         req.user.id,
         description || '',
         category_id || null,
-        req.user.role
+        req.user.role,
+        company_id
       ]
     );
 
@@ -50,17 +53,20 @@ router.post('/add-income', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Monto requerido' });
     }
 
+    const company_id = req.user.company_id;
+
     await pool.query(
       `
       INSERT INTO cash_movements
-      (type, reference_type, amount, staff_id, description, created_by_role)
-      VALUES ('income', 'manual', $1, $2, $3, $4)
+      (type, reference_type, amount, staff_id, description, created_by_role, company_id)
+      VALUES ('income', 'manual', $1, $2, $3, $4, $5)
       `,
       [
         amount,
         req.user.id,
         description || '',
-        req.user.role
+        req.user.role,
+        company_id
       ]
     );
 
@@ -84,6 +90,8 @@ router.get('/report', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Fechas requeridas (from, to)' });
     }
 
+    const company_id = req.user.company_id;
+
     const result = await pool.query(
       `
       SELECT 
@@ -91,10 +99,11 @@ router.get('/report', requireAuth, async (req, res) => {
         COALESCE(SUM(amount),0) as total,
         COUNT(*) as movements
       FROM cash_movements
-      WHERE DATE(created_at) BETWEEN DATE($1) AND DATE($2)
+      WHERE company_id = $1
+      AND DATE(created_at) BETWEEN DATE($2) AND DATE($3)
       GROUP BY type
       `,
-      [from, to]
+      [company_id, from, to]
     );
 
     let income = 0;
@@ -132,17 +141,20 @@ router.get('/movements', requireAuth, async (req, res) => {
   try {
     const { from, to } = req.query;
 
+    const company_id = req.user.company_id;
+
     let query = `
       SELECT cm.*, ec.name as category_name, u.name as staff_name
       FROM cash_movements cm
       LEFT JOIN expense_categories ec ON cm.category_id = ec.id
       LEFT JOIN users u ON cm.staff_id = u.id
+      WHERE cm.company_id = $1
     `;
 
-    const params = [];
+    const params = [company_id];
 
     if (from && to) {
-      query += ` WHERE DATE(cm.created_at) BETWEEN DATE($1) AND DATE($2)`;
+      query += ` AND DATE(cm.created_at) BETWEEN DATE($2) AND DATE($3)`;
       params.push(from, to);
     }
 
@@ -164,9 +176,16 @@ router.get('/movements', requireAuth, async (req, res) => {
 // =========================
 router.get('/categories', requireAuth, async (req, res) => {
   try {
-    const result = await pool.query(
-      `SELECT * FROM expense_categories ORDER BY name`
-    );
+      const company_id = req.user.company_id;
+
+      const result = await pool.query(
+        `
+        SELECT * FROM expense_categories
+        WHERE company_id = $1
+        ORDER BY name
+        `,
+        [company_id]
+      );
 
     res.json(result.rows);
 
