@@ -110,4 +110,4 @@ app.use('/trainer-packages', require('./modules/trainerPackages/trainerPackagesR
 
 app.use('/trainer', require('./modules/trainer/trainerClientsRoutes.cjs'));
 
-app.use('/trainer/sessions', require('./src/routes/trainerSessions.cjs'));
+app.use('/trainer/sessions', require('./routes/trainerSessions.cjs'));
