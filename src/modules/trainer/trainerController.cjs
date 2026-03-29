@@ -32,6 +32,37 @@ exports.createSession = async (req, res) => {
       });
     }
 
+    // 🔥 VALIDAR QUE CLIENTE TENGA PAQUETE ACTIVO
+    if (client_id) {
+
+    const pkgCheck = await pool.query(
+        `
+        SELECT id, sessions_total, sessions_used
+        FROM trainer_client_packages
+        WHERE client_id = $1
+        AND company_id = $2
+        AND status = 'active'
+        LIMIT 1
+        `,
+        [client_id, req.user.company_id]
+    );
+
+    if (pkgCheck.rows.length === 0) {
+        return res.status(400).json({
+        error: 'El cliente no tiene paquete activo'
+        });
+    }
+
+    const pkg = pkgCheck.rows[0];
+
+    if (Number(pkg.sessions_used) >= Number(pkg.sessions_total)) {
+        return res.status(400).json({
+        error: 'El cliente ya no tiene sesiones disponibles'
+        });
+    }
+    }
+
+
     const { rows } = await pool.query(
       `
       INSERT INTO trainer_sessions
@@ -222,4 +253,189 @@ exports.updateSessionStatus = async (req, res) => {
   } finally {
     client.release();
   }
+};
+
+// =============================
+// 🔥 APROBAR PAQUETE TRAINER
+// =============================
+exports.approveTrainerPackage = async (req, res) => {
+
+  try {
+
+    const request_id = req.params.id;
+    const companyId = req.user.company_id;
+
+    // 🔥 1. TRAER REQUEST + PAQUETE
+    const result = await pool.query(
+      `
+      SELECT r.*, p.sessions, p.price
+      FROM trainer_package_requests r
+      JOIN trainer_packages p ON r.package_id = p.id
+      WHERE r.id = $1
+        AND r.company_id = $2
+      `,
+      [request_id, companyId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        error: "Solicitud no encontrada"
+      });
+    }
+
+    const request = result.rows[0];
+
+    // 🔥 2. CREAR PAQUETE DEL CLIENTE
+    const pkg = await pool.query(
+      `
+      INSERT INTO trainer_client_packages
+      (
+        company_id,
+        client_id,
+        package_id,
+        sessions_total,
+        sessions_used,
+        status
+      )
+      VALUES ($1,$2,$3,$4,0,'active')
+      RETURNING *
+      `,
+      [
+        companyId,
+        request.client_id,
+        request.package_id,
+        request.sessions
+      ]
+    );
+
+    const createdPackage = pkg.rows[0];
+
+    // 🔥 3. ACTUALIZAR REQUEST
+    await pool.query(
+      `
+      UPDATE trainer_package_requests
+      SET status = 'approved',
+          approved_by = $1,
+          approved_at = NOW()
+      WHERE id = $2
+        AND company_id = $3
+      `,
+      [req.user.id, request_id, companyId]
+    );
+
+    // 💰 4. REGISTRAR INGRESO (IGUAL QUE GYM)
+    await pool.query(
+      `
+      INSERT INTO cash_movements
+      (type, reference_type, reference_id, amount, staff_id, description, created_by_role, company_id)
+      VALUES ('income', 'trainer_package', $1, $2, $3, $4, $5, $6)
+      `,
+      [
+        request_id,
+        request.price,
+        req.user.id,
+        'Pago paquete sesiones',
+        req.user.role,
+        companyId
+      ]
+    );
+
+    res.json({
+      message: "Paquete activado",
+      package: createdPackage
+    });
+
+  } catch (err) {
+
+    console.error(err);
+    res.status(500).json({
+      error: "Error aprobando paquete"
+    });
+
+  }
+
+};
+
+// =============================
+// 🔥 CREAR SOLICITUD DE PAQUETE
+// =============================
+exports.createPackageRequest = async (req, res) => {
+
+  try {
+
+    const { package_id, payment_proof_url } = req.body;
+    const companyId = req.user.company_id;
+
+    if (!package_id) {
+      return res.status(400).json({
+        error: "Paquete requerido"
+      });
+    }
+
+    const result = await pool.query(
+      `
+      INSERT INTO trainer_package_requests
+      (company_id, client_id, package_id, payment_proof_url)
+      VALUES ($1,$2,$3,$4)
+      RETURNING *
+      `,
+      [
+        companyId,
+        req.user.id,
+        package_id,
+        payment_proof_url || null
+      ]
+    );
+
+    res.json(result.rows[0]);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      error: "Error creando solicitud"
+    });
+  }
+
+};
+
+// =============================
+// 🔥 VER SOLICITUDES TRAINER
+// =============================
+exports.getPackageRequests = async (req, res) => {
+
+  try {
+
+    const companyId = req.user.company_id;
+
+    const { rows } = await pool.query(
+      `
+      SELECT
+        r.id,
+        u.name,
+        u.last_name,
+        p.name as package,
+        p.price,
+        p.sessions,
+        r.payment_proof_url,
+        r.status,
+        r.created_at
+      FROM trainer_package_requests r
+      JOIN users u ON r.client_id = u.id
+      JOIN trainer_packages p ON r.package_id = p.id
+      WHERE r.status = 'pending'
+        AND r.company_id = $1
+      ORDER BY r.created_at DESC
+      `,
+      [companyId]
+    );
+
+    res.json(rows);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      error: "Error obteniendo solicitudes"
+    });
+  }
+
 };
