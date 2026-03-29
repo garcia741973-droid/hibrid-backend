@@ -111,6 +111,7 @@ exports.useSession = async (req, res) => {
 };
 
 // 🔥 FINALIZAR SESIÓN (AUTOMÁTICO)
+// 🔥 FINALIZAR SESIÓN (USANDO PAQUETES)
 exports.completeSession = async (req, res) => {
 
   const client = await pool.connect();
@@ -122,35 +123,42 @@ exports.completeSession = async (req, res) => {
     const { session_id, user_id } = req.body;
     const company_id = req.user.company_id;
 
-    /// 1. VALIDAR SESIONES DISPONIBLES
-    const sessionData = await client.query(
+    /// 🔥 1. OBTENER PAQUETE ACTIVO
+    const pkgRes = await client.query(
       `
-      SELECT remaining_sessions
-      FROM client_sessions
-      WHERE user_id = $1 AND company_id = $2
+      SELECT id, sessions_total, sessions_used
+      FROM trainer_client_packages
+      WHERE client_id = $1
+        AND company_id = $2
+        AND status = 'active'
+      LIMIT 1
       `,
       [user_id, company_id]
     );
 
-    if (sessionData.rows.length === 0) {
-      throw new Error("Cliente no tiene sesiones");
+    if (pkgRes.rows.length === 0) {
+      throw new Error("Cliente sin paquete activo");
     }
 
-    if (sessionData.rows[0].remaining_sessions <= 0) {
+    const pkg = pkgRes.rows[0];
+
+    const remaining = pkg.sessions_total - pkg.sessions_used;
+
+    if (remaining <= 0) {
       throw new Error("Sin sesiones disponibles");
     }
 
-    /// 2. DESCONTAR
+    /// 🔥 2. SUMAR USO
     await client.query(
       `
-      UPDATE client_sessions
-      SET remaining_sessions = remaining_sessions - 1
-      WHERE user_id = $1 AND company_id = $2
+      UPDATE trainer_client_packages
+      SET sessions_used = sessions_used + 1
+      WHERE id = $1
       `,
-      [user_id, company_id]
+      [pkg.id]
     );
 
-    /// 3. LOG (ANTI FRAUDE)
+    /// 🔥 3. LOG
     await client.query(
       `
       INSERT INTO session_logs
