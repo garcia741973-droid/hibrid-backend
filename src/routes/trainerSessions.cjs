@@ -8,4 +8,6 @@ router.post('/create', requireAuth, controller.createSessions);
 router.get('/:user_id', requireAuth, controller.getClientSessions);
 router.post('/use', requireAuth, controller.useSession);
 
+router.post('/complete', requireAuth, controller.completeSession);
+
 module.exports = router;

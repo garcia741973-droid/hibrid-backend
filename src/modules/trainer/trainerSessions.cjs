@@ -109,3 +109,70 @@ exports.useSession = async (req, res) => {
     client.release();
   }
 };
+
+// 🔥 FINALIZAR SESIÓN (AUTOMÁTICO)
+exports.completeSession = async (req, res) => {
+
+  const client = await pool.connect();
+
+  try {
+
+    await client.query('BEGIN');
+
+    const { session_id, user_id } = req.body;
+    const company_id = req.user.company_id;
+
+    /// 1. VALIDAR SESIONES DISPONIBLES
+    const sessionData = await client.query(
+      `
+      SELECT remaining_sessions
+      FROM client_sessions
+      WHERE user_id = $1 AND company_id = $2
+      `,
+      [user_id, company_id]
+    );
+
+    if (sessionData.rows.length === 0) {
+      throw new Error("Cliente no tiene sesiones");
+    }
+
+    if (sessionData.rows[0].remaining_sessions <= 0) {
+      throw new Error("Sin sesiones disponibles");
+    }
+
+    /// 2. DESCONTAR
+    await client.query(
+      `
+      UPDATE client_sessions
+      SET remaining_sessions = remaining_sessions - 1
+      WHERE user_id = $1 AND company_id = $2
+      `,
+      [user_id, company_id]
+    );
+
+    /// 3. LOG (ANTI FRAUDE)
+    await client.query(
+      `
+      INSERT INTO session_logs
+      (user_id, session_id, company_id)
+      VALUES ($1,$2,$3)
+      `,
+      [user_id, session_id, company_id]
+    );
+
+    await client.query('COMMIT');
+
+    res.json({ success: true });
+
+  } catch (err) {
+
+    await client.query('ROLLBACK');
+
+    res.status(400).json({
+      error: err.message
+    });
+
+  } finally {
+    client.release();
+  }
+};
