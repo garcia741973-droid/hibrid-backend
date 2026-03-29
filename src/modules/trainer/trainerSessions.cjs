@@ -4,17 +4,17 @@ const { pool } = require('../../config/db');
 exports.createSessions = async (req, res) => {
   try {
 
-    const { user_id, total_sessions, expiration_date } = req.body;
+    const { user_id, sessions_total, expiration_date } = req.body;
     const company_id = req.user.company_id;
 
     const { rows } = await pool.query(
       `
       INSERT INTO client_sessions
-      (user_id, total_sessions, remaining_sessions, expiration_date, company_id)
+      (user_id, sessions_total, remaining_sessions, expiration_date, company_id)
       VALUES ($1,$2,$2,$3,$4)
       RETURNING *
       `,
-      [user_id, total_sessions, expiration_date || null, company_id]
+      [user_id, sessions_total, expiration_date || null, company_id]
     );
 
     res.json(rows[0]);
