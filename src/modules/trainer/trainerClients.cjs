@@ -1,5 +1,8 @@
 const { pool } = require('../../config/db');
 
+const { pool } = require('../../config/db');
+const bcrypt = require('bcrypt');
+
 // ✅ CREAR CLIENTE COMPLETO
 const createClient = async (req, res) => {
   try {
@@ -17,6 +20,9 @@ const createClient = async (req, res) => {
 
     const company_id = req.user.company_id;
 
+    const password = "123456";
+    const hashedPassword = await bcrypt.hash(password, 10);
+
     const result = await pool.query(
       `
       INSERT INTO users (
@@ -33,7 +39,7 @@ const createClient = async (req, res) => {
         photo_url,
         company_id
       )
-      VALUES ($1,$2,$3,'123456','client',$4,$5,$6,$7,$8,$9,$10)
+      VALUES ($1,$2,$3,$11,'client',$4,$5,$6,$7,$8,$9,$10)
       RETURNING id, name, last_name, email, phone, photo_url
       `,
       [
@@ -46,11 +52,16 @@ const createClient = async (req, res) => {
         emergency_contact_name,
         emergency_contact_phone,
         photo_url,
-        company_id
+        company_id,
+        hashedPassword
       ]
     );
 
-    res.json(result.rows[0]);
+    res.json({
+      user: result.rows[0],
+      password: password // 🔥 IMPORTANTE
+    });
+
   } catch (err) {
     console.log(err);
     res.status(500).json({ error: "Error creando cliente" });
