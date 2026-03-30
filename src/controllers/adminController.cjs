@@ -72,7 +72,8 @@ exports.createClient = async (req, res) => {
     res.json({
       message:"Cliente creado",
       user,
-      qr:qrCode
+      qr: qrCode,
+      password: password // 🔥 CLAVE
     });
 
   } catch(error){
