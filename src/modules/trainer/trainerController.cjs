@@ -507,3 +507,122 @@ exports.getClientPackage = async (req, res) => {
     });
   }
 };
+
+// =============================
+// 🔥 AUTO CREAR SESIONES
+// =============================
+exports.autoCreateSessions = async (req, res) => {
+
+  try {
+
+    const {
+      client_id,
+      days,
+      start_time,
+      end_time
+    } = req.body;
+
+    const companyId = req.user.company_id;
+
+    if (!client_id || !days || days.length === 0) {
+      return res.status(400).json({
+        error: "Datos incompletos"
+      });
+    }
+
+    // 🔥 1. OBTENER PAQUETE
+    const pkgRes = await pool.query(
+      `
+      SELECT sessions_total, sessions_used, start_date
+      FROM trainer_client_packages
+      WHERE client_id = $1
+        AND company_id = $2
+        AND status = 'active'
+      ORDER BY created_at DESC
+      LIMIT 1
+      `,
+      [client_id, companyId]
+    );
+
+    if (pkgRes.rows.length === 0) {
+      return res.status(400).json({
+        error: "Cliente sin paquete activo"
+      });
+    }
+
+    const pkg = pkgRes.rows[0];
+
+    const sessionsLeft =
+      Number(pkg.sessions_total) - Number(pkg.sessions_used);
+
+    if (sessionsLeft <= 0) {
+      return res.status(400).json({
+        error: "Sin sesiones disponibles"
+      });
+    }
+
+    // 🔥 2. FECHA INICIO
+    let currentDate = pkg.start_date
+      ? new Date(pkg.start_date)
+      : new Date();
+
+    const created = [];
+
+    // 🔥 3. GENERAR SESIONES
+    while (created.length < sessionsLeft) {
+
+      const day = currentDate.getDay(); // 0-6
+
+      if (days.includes(day)) {
+
+        const dateStr = currentDate.toISOString().split("T")[0];
+
+        const insert = await pool.query(
+          `
+          INSERT INTO trainer_sessions
+          (
+            company_id,
+            trainer_id,
+            client_id,
+            title,
+            notes,
+            session_date,
+            start_time,
+            end_time,
+            status
+          )
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'scheduled')
+          RETURNING *
+          `,
+          [
+            companyId,
+            req.user.id,
+            client_id,
+            'Sesión',
+            '',
+            dateStr,
+            start_time,
+            end_time
+          ]
+        );
+
+        created.push(insert.rows[0]);
+      }
+
+      // avanzar un día
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    res.json({
+      message: "Sesiones creadas",
+      total: created.length
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      error: "Error creando sesiones automáticas"
+    });
+  }
+
+};

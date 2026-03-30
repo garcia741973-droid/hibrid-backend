@@ -19,4 +19,10 @@ router.get(
   controller.getClientPackage
 );
 
+router.post(
+  "/sessions/auto",
+  requireAuth,
+  controller.autoCreateSessions
+);
+
 module.exports = router;
