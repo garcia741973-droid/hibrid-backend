@@ -112,22 +112,29 @@ exports.getSessions = async (req, res) => {
     }
 
     const { rows } = await pool.query(
-    `
-    SELECT *
-    FROM trainer_sessions
-    WHERE company_id = $1
-    `,
-    [req.user.company_id]
+      `
+      SELECT 
+        ts.*,
+        u.name,
+        u.last_name,
+        (u.name || ' ' || u.last_name) AS client_name
+      FROM trainer_sessions ts
+      LEFT JOIN users u ON u.id = ts.client_id
+      WHERE ts.company_id = $1
+      ORDER BY ts.session_date, ts.start_time
+      `,
+      [req.user.company_id]
     );
 
     res.json(rows);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({
-        error: 'Error obteniendo sesiones'
-        });
-    }
-    };
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      error: 'Error obteniendo sesiones'
+    });
+  }
+};
 
 // =============================
 // 🔥 ACTUALIZAR ESTADO
