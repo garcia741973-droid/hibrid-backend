@@ -25,4 +25,6 @@ router.post(
   controller.autoCreateSessions
 );
 
+router.post("/sessions/mark", requireAuth, markSessionStatus);
+
 module.exports = router;

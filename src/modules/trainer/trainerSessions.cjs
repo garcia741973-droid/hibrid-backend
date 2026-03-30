@@ -190,3 +190,77 @@ exports.completeSession = async (req, res) => {
     client.release();
   }
 };
+
+// =============================
+// 🔥 MARCAR SESIÓN (completed / no_show / cancelled)
+// =============================
+exports.markSessionStatus = async (req, res) => {
+  try {
+    const { session_id, status } = req.body;
+    const company_id = req.user.company_id;
+
+    /// 🔎 1. VALIDAR STATUS
+    const allowed = ["completed", "no_show", "cancelled"];
+    if (!allowed.includes(status)) {
+      return res.status(400).json({ error: "Estado inválido" });
+    }
+
+    /// 🔎 2. BUSCAR SESIÓN
+    const { rows } = await pool.query(
+      `
+      SELECT * FROM client_sessions
+      WHERE id = $1 AND company_id = $2
+      `,
+      [session_id, company_id]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "Sesión no encontrada" });
+    }
+
+    const session = rows[0];
+
+    /// 🚫 3. EVITAR DOBLE DESCUENTO
+    if (session.status === "completed" || session.status === "no_show") {
+      return res.status(400).json({
+        error: "Esta sesión ya fue procesada"
+      });
+    }
+
+    /// 🔥 4. DEFINIR DESCUENTO
+    let discount = 0;
+
+    if (status === "completed" || status === "no_show") {
+      discount = 1;
+    }
+
+    /// 🚫 5. EVITAR NEGATIVOS
+    if (session.remaining_sessions <= 0 && discount > 0) {
+      return res.status(400).json({
+        error: "No hay sesiones disponibles"
+      });
+    }
+
+    /// 🔥 6. ACTUALIZAR SESIÓN
+    await pool.query(
+      `
+      UPDATE client_sessions
+      SET 
+        remaining_sessions = remaining_sessions - $1,
+        status = $2
+      WHERE id = $3
+      `,
+      [discount, status, session_id]
+    );
+
+    res.json({
+      success: true,
+      status,
+      discount
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error marcando sesión" });
+  }
+};
