@@ -13,4 +13,10 @@ router.post('/package-requests', requireAuth, controller.createPackageRequest);
 router.get('/package-requests', requireAuth, controller.getPackageRequests);
 router.post('/package-requests/:id/approve', requireAuth, controller.approveTrainerPackage);
 
+router.get(
+  "/client-package/:clientId",
+  requireAuth,
+  controller.getClientPackage
+);
+
 module.exports = router;

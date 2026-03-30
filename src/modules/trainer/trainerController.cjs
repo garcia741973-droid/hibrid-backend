@@ -472,3 +472,39 @@ exports.getPackageRequests = async (req, res) => {
   }
 
 };
+
+// 🔥 VER PAQUETE DEL CLIENTE
+exports.getClientPackage = async (req, res) => {
+  try {
+
+    const client_id = req.params.clientId;
+
+    const { rows } = await pool.query(
+      `
+      SELECT
+        sessions_total,
+        sessions_used,
+        (sessions_total - sessions_used) AS sessions_left,
+        status
+      FROM trainer_client_packages
+      WHERE client_id = $1
+        AND company_id = $2
+        AND status = 'active'
+      LIMIT 1
+      `,
+      [client_id, req.user.company_id]
+    );
+
+    if (rows.length === 0) {
+      return res.json(null);
+    }
+
+    res.json(rows[0]);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      error: "Error obteniendo paquete"
+    });
+  }
+};
