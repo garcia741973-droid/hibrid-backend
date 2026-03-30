@@ -206,11 +206,12 @@ exports.updateSessionStatus = async (req, res) => {
     const updatedSession = updateRes.rows[0];
 
     // 🔥 3. SI PASA A COMPLETED Y TIENE CLIENTE → DESCONTAR 1 SESIÓN
-    if (
-      status === 'completed' &&
-      session.status !== 'completed' &&
-      session.client_id
-    ) {
+        if (
+        (status === 'completed' || status === 'no_show') &&
+        session.status !== 'completed' &&
+        session.status !== 'no_show' &&
+        session.client_id
+        ) {
       const pkgRes = await client.query(
         `
         SELECT id, sessions_total, sessions_used, status
