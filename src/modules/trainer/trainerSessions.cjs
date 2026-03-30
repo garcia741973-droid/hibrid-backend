@@ -4,17 +4,23 @@ const { pool } = require('../../config/db');
 exports.createSessions = async (req, res) => {
   try {
 
-    const { user_id, sessions_total, expiration_date } = req.body;
+    const { user_id, sessions_total, expiration_date, start_date } = req.body;
     const company_id = req.user.company_id;
+
+    if (!start_date) {
+      return res.status(400).json({
+        error: "Fecha de inicio requerida"
+      });
+    }
 
     const { rows } = await pool.query(
       `
-      INSERT INTO client_sessions
-      (user_id, sessions_total, remaining_sessions, expiration_date, company_id)
-      VALUES ($1,$2,$2,$3,$4)
-      RETURNING *
+        INSERT INTO trainer_client_packages
+        (user_id, sessions_total, remaining_sessions, expiration_date, company_id, start_date)
+        VALUES ($1,$2,$2,$3,$4,$5)
+        RETURNING *
       `,
-      [user_id, sessions_total, expiration_date || null, company_id]
+      [user_id, sessions_total, expiration_date || null, company_id, start_date]
     );
 
     res.json(rows[0]);
@@ -34,7 +40,7 @@ exports.getClientSessions = async (req, res) => {
   const { rows } = await pool.query(
     `
     SELECT *
-    FROM client_sessions
+    FROM trainer_client_packages
     WHERE user_id = $1
     AND company_id = $2
     ORDER BY created_at DESC
@@ -61,7 +67,7 @@ exports.useSession = async (req, res) => {
     const session = await client.query(
       `
       SELECT *
-      FROM client_sessions
+      FROM trainer_client_packages
       WHERE user_id = $1
       AND remaining_sessions > 0
       AND company_id = $2
@@ -79,7 +85,7 @@ exports.useSession = async (req, res) => {
 
     await client.query(
       `
-      UPDATE client_sessions
+      UPDATE trainer_client_packages
       SET remaining_sessions = remaining_sessions - 1
       WHERE id = $1
       `,

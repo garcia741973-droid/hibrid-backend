@@ -162,7 +162,7 @@ exports.updateSessionStatus = async (req, res) => {
       });
     }
 
-    const validStatus = ['scheduled', 'completed', 'cancelled'];
+    const validStatus = ['scheduled', 'completed', 'cancelled', 'no_show'];
 
     if (!validStatus.includes(status)) {
       await client.query('ROLLBACK');
