@@ -268,7 +268,7 @@ exports.approveTrainerPackage = async (req, res) => {
     // 🔥 1. TRAER REQUEST + PAQUETE
     const result = await pool.query(
       `
-      SELECT r.*, p.sessions_total AS sessions,, p.price
+      SELECT r.*, p.sessions_total AS sessions, p.price
       FROM trainer_package_requests r
       JOIN trainer_packages p ON r.package_id = p.id
       WHERE r.id = $1
@@ -448,7 +448,7 @@ exports.getPackageRequests = async (req, res) => {
         u.last_name,
         p.name as package,
         p.price,
-        p.sessions,
+        p.sessions_total AS sessions,
         r.payment_proof_url,
         r.status,
         r.created_at
