@@ -111,15 +111,33 @@ exports.getSessions = async (req, res) => {
       });
     }
 
-    const { rows } = await pool.query(
-      `
-      SELECT *
-      FROM trainer_sessions
-      WHERE company_id = $1
-      ORDER BY session_date ASC, start_time ASC
-      `,
-      [req.user.company_id]
-    );
+        const { rows } = await pool.query(
+        `
+        SELECT 
+            ts.*,
+            u.name || ' ' || u.last_name AS client_name,
+
+            tcp.sessions_total,
+            tcp.sessions_used
+
+        FROM trainer_sessions ts
+        LEFT JOIN users u ON ts.client_id = u.id
+
+        LEFT JOIN LATERAL (
+            SELECT sessions_total, sessions_used
+            FROM trainer_client_packages
+            WHERE client_id = ts.client_id
+            AND company_id = $1
+            AND status = 'active'
+            ORDER BY created_at DESC
+            LIMIT 1
+        ) tcp ON true
+
+        WHERE ts.company_id = $1
+        ORDER BY ts.session_date ASC, ts.start_time ASC
+        `,
+        [req.user.company_id]
+        );
 
     res.json(rows);
   } catch (err) {
