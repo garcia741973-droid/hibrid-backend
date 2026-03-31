@@ -25,6 +25,10 @@ router.patch('/expense-categories/:id/toggle',
   controller.toggleCategory
 );
 
-router.put('/expense-categories/:id', requireAuth, updateCategory);
+router.put('/expense-categories/:id',
+  requireAuth,
+  requireRole(["admin","superadmin"]),
+  controller.updateCategory
+);
 
 module.exports = router;
