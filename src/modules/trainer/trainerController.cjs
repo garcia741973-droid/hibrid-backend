@@ -113,10 +113,13 @@ exports.getSessions = async (req, res) => {
 
     const { rows } = await pool.query(
       `
-      SELECT 
+        SELECT 
         ts.*,
         u.name,
         u.last_name,
+        u.phone,
+        u.emergency_contact_name,
+        u.emergency_contact_phone,
         (u.name || ' ' || u.last_name) AS client_name
       FROM trainer_sessions ts
       LEFT JOIN users u ON u.id = ts.client_id
