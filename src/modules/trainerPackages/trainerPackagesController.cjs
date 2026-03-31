@@ -59,8 +59,6 @@ exports.getPackages = async (req, res) => {
       });
     }
 
-    console.log("ROWS FOUND:", rows);
-
     const { rows } = await pool.query(
       `
       SELECT *
