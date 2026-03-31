@@ -509,7 +509,8 @@ exports.getClientPackage = async (req, res) => {
 
     const client_id = req.params.clientId;
 
-    const { rows } = await pool.query(
+    // 🔥 1. PAQUETE
+    const pkgRes = await pool.query(
       `
       SELECT
         sessions_total,
@@ -525,11 +526,33 @@ exports.getClientPackage = async (req, res) => {
       [client_id, req.user.company_id]
     );
 
-    if (rows.length === 0) {
+    if (pkgRes.rows.length === 0) {
       return res.json(null);
     }
 
-    res.json(rows[0]);
+    const pkg = pkgRes.rows[0];
+
+    // 🔥 2. SESIONES PROGRAMADAS
+    const scheduledRes = await pool.query(
+      `
+      SELECT COUNT(*) as total
+      FROM trainer_sessions
+      WHERE client_id = $1
+        AND company_id = $2
+        AND status = 'scheduled'
+      `,
+      [client_id, req.user.company_id]
+    );
+
+    const scheduled = Number(scheduledRes.rows[0].total);
+
+    const realAvailable = pkg.sessions_left - scheduled;
+
+    res.json({
+      ...pkg,
+      sessions_scheduled: scheduled,
+      sessions_real_available: realAvailable
+    });
 
   } catch (err) {
     console.error(err);
