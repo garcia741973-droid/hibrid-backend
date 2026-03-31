@@ -59,15 +59,25 @@ exports.getPackages = async (req, res) => {
       });
     }
 
-    const { rows } = await pool.query(
-      `
-      SELECT *
-      FROM trainer_packages
-      WHERE company_id = $1
-      ORDER BY created_at DESC
-      `,
-      [req.user.company_id]
-    );
+        const { rows } = await pool.query(
+        `
+        SELECT 
+            tp.*,
+
+            COALESCE((
+            SELECT COUNT(*)
+            FROM trainer_client_packages tcp
+            WHERE tcp.package_id = tp.id
+                AND tcp.company_id = tp.company_id
+                AND tcp.status = 'active'
+            ), 0) AS clients_count
+
+        FROM trainer_packages tp
+        WHERE tp.company_id = $1
+        ORDER BY tp.created_at DESC
+        `,
+        [req.user.company_id]
+        );
 
     console.log("ROWS FOUND:", rows);
 
@@ -196,6 +206,97 @@ exports.getClientPackages = async (req, res) => {
     console.error(err);
     res.status(500).json({
       error: 'Error obteniendo paquetes del cliente'
+    });
+  }
+};
+
+// =============================
+// ✏️ EDITAR PAQUETE
+// =============================
+exports.updatePackage = async (req, res) => {
+  try {
+
+    const { id } = req.params;
+    const { name, sessions_total, price } = req.body;
+
+    if (req.user.company_type !== 'trainer') {
+      return res.status(403).json({
+        error: 'Solo trainer'
+      });
+    }
+
+    const { rows } = await pool.query(
+      `
+      UPDATE trainer_packages
+      SET name = $1,
+          sessions_total = $2,
+          price = $3
+      WHERE id = $4
+        AND company_id = $5
+      RETURNING *
+      `,
+      [
+        name,
+        sessions_total,
+        price,
+        id,
+        req.user.company_id
+      ]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({
+        error: "Paquete no encontrado"
+      });
+    }
+
+    res.json(rows[0]);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      error: 'Error actualizando paquete'
+    });
+  }
+};
+
+
+
+// =============================
+// 🗑 ELIMINAR PAQUETE
+// =============================
+exports.deletePackage = async (req, res) => {
+  try {
+
+    const { id } = req.params;
+
+    if (req.user.company_type !== 'trainer') {
+      return res.status(403).json({
+        error: 'Solo trainer'
+      });
+    }
+
+    const { rowCount } = await pool.query(
+      `
+      DELETE FROM trainer_packages
+      WHERE id = $1
+        AND company_id = $2
+      `,
+      [id, req.user.company_id]
+    );
+
+    if (rowCount === 0) {
+      return res.status(404).json({
+        error: "Paquete no encontrado"
+      });
+    }
+
+    res.json({ success: true });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      error: 'Error eliminando paquete'
     });
   }
 };
