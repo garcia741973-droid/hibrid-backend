@@ -30,6 +30,7 @@ app.use('/admin', adminMembershipRoutes);
 app.use('/staff', staffMembershipRoutes);
 
 app.use('/trainer', require('./modules/trainer/trainerRoutes.cjs'));
+app.use('/trainer-packages', require('./modules/trainerPackages/trainerPackagesRoutes.cjs'));
 
 // ruta test
 app.get("/", async (req, res) => {
@@ -105,8 +106,6 @@ app.post("/users/save-fcm-token", requireAuth, async (req, res) => {
 
 const passwordRecoveryRoutes = require('./routes/passwordRecovery.cjs');
 app.use('/auth', passwordRecoveryRoutes);
-
-app.use('/trainer-packages', require('./modules/trainerPackages/trainerPackagesRoutes.cjs'));
 
 app.use('/trainer', require('./modules/trainer/trainerClientsRoutes.cjs'));
 
