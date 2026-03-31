@@ -48,6 +48,9 @@ exports.createPackage = async (req, res) => {
 // =============================
 exports.getPackages = async (req, res) => {
   try {
+
+    console.log("🔥 GET PACKAGES HIT");
+
     if (req.user.company_type !== 'trainer') {
       return res.status(403).json({
         error: 'Solo trainer'
