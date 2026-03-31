@@ -16,6 +16,8 @@ router.post(
 
 router.get(
  "/clients",
+ requireAuth,
+ requireRole(["admin","superadmin"]),
  adminController.getClients
 );
 
