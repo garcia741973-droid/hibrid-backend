@@ -44,8 +44,7 @@ exports.getCategories = async (req, res) => {
       `
       SELECT *
       FROM expense_categories
-      WHERE is_active = true
-      AND company_id = $1
+      WHERE company_id = $1
       ORDER BY name ASC
       `,
       [company_id]
