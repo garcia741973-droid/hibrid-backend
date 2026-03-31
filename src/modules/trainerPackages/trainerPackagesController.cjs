@@ -50,6 +50,8 @@ exports.getPackages = async (req, res) => {
   try {
 
     console.log("🔥 GET PACKAGES HIT");
+    console.log("COMPANY ID TOKEN:", req.user.company_id);
+    console.log("COMPANY TYPE TOKEN:", req.user.company_type);    
 
     if (req.user.company_type !== 'trainer') {
       return res.status(403).json({
