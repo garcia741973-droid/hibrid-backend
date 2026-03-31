@@ -54,6 +54,8 @@ exports.getPackages = async (req, res) => {
       });
     }
 
+    console.log("ROWS FOUND:", rows);
+
     const { rows } = await pool.query(
       `
       SELECT *
@@ -63,6 +65,8 @@ exports.getPackages = async (req, res) => {
       `,
       [req.user.company_id]
     );
+
+    console.log("ROWS FOUND:", rows);
 
     res.json(rows);
   } catch (err) {
