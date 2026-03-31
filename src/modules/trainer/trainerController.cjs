@@ -637,3 +637,45 @@ exports.autoCreateSessions = async (req, res) => {
   }
 
 };
+
+// =============================
+// 🔥 LISTAR CLIENTES TRAINER
+// =============================
+exports.getClients = async (req, res) => {
+  try {
+
+    if (req.user.company_type !== 'trainer') {
+      return res.status(403).json({
+        error: 'Solo trainer'
+      });
+    }
+
+    const { rows } = await pool.query(
+      `
+      SELECT 
+        id,
+        name,
+        last_name,
+        email,
+        phone,
+        photo_url,
+        gender,
+        birth_date,
+        emergency_contact_name,
+        emergency_contact_phone
+      FROM users
+      WHERE company_id = $1
+      ORDER BY id DESC
+      `,
+      [req.user.company_id]
+    );
+
+    res.json(rows);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      error: 'Error obteniendo clientes'
+    });
+  }
+};

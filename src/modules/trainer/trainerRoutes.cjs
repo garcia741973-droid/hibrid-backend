@@ -25,4 +25,6 @@ router.post(
   controller.autoCreateSessions
 );
 
+router.get('/clients', requireAuth, controller.getClients);
+
 module.exports = router;
