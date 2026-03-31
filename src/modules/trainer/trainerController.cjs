@@ -33,34 +33,54 @@ exports.createSession = async (req, res) => {
     }
 
     // 🔥 VALIDAR QUE CLIENTE TENGA PAQUETE ACTIVO
-    if (client_id) {
+        if (client_id) {
 
-    const pkgCheck = await pool.query(
-        `
-        SELECT id, sessions_total, sessions_used
-        FROM trainer_client_packages
-        WHERE client_id = $1
-        AND company_id = $2
-        AND status = 'active'
-        LIMIT 1
-        `,
-        [client_id, req.user.company_id]
-    );
+        // 🔥 1. OBTENER PAQUETE
+        const pkgCheck = await pool.query(
+            `
+            SELECT id, sessions_total, sessions_used
+            FROM trainer_client_packages
+            WHERE client_id = $1
+            AND company_id = $2
+            AND status = 'active'
+            LIMIT 1
+            `,
+            [client_id, req.user.company_id]
+        );
 
-    if (pkgCheck.rows.length === 0) {
-        return res.status(400).json({
-        error: 'El cliente no tiene paquete activo'
-        });
-    }
+        if (pkgCheck.rows.length === 0) {
+            return res.status(400).json({
+            error: 'El cliente no tiene paquete activo'
+            });
+        }
 
-    const pkg = pkgCheck.rows[0];
+        const pkg = pkgCheck.rows[0];
 
-    if (Number(pkg.sessions_used) >= Number(pkg.sessions_total)) {
-        return res.status(400).json({
-        error: 'El cliente ya no tiene sesiones disponibles'
-        });
-    }
-    }
+        const sessionsLeft =
+            Number(pkg.sessions_total) - Number(pkg.sessions_used);
+
+        // 🔥 2. CONTAR SESIONES FUTURAS (no completadas)
+        const futureSessions = await pool.query(
+            `
+            SELECT COUNT(*) as total
+            FROM trainer_sessions
+            WHERE client_id = $1
+            AND company_id = $2
+            AND status IN ('scheduled')
+            `,
+            [client_id, req.user.company_id]
+        );
+
+        const scheduled = Number(futureSessions.rows[0].total);
+
+        const realAvailable = sessionsLeft - scheduled;
+
+        if (realAvailable <= 0) {
+            return res.status(400).json({
+            error: 'El cliente ya tiene todas sus sesiones programadas'
+            });
+        }
+        }
 
 
     const { rows } = await pool.query(
