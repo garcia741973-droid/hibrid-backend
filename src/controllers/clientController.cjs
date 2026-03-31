@@ -246,8 +246,20 @@ exports.getClients = async (req, res) => {
     const companyId = req.user.company_id;
 
     const { rows } = await pool.query(
-      `SELECT id, name, last_name
-       FROM users
+      `SELECT 
+        id,
+        name,
+        last_name,
+        email,
+        phone,
+        gender,
+        birth_date,
+        emergency_contact_name,
+        emergency_contact_phone,
+        photo_url,
+        membership_start,
+        membership_end
+      FROM users
        WHERE role = 'client'
        AND company_id = $1
        ORDER BY name`,
