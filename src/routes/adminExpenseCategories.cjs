@@ -25,4 +25,6 @@ router.patch('/expense-categories/:id/toggle',
   controller.toggleCategory
 );
 
+router.put('/expense-categories/:id', requireAuth, updateCategory);
+
 module.exports = router;

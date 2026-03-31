@@ -68,7 +68,7 @@ exports.toggleCategory = async (req, res) => {
 
     const { id } = req.params;
 
-const company_id = req.user.company_id;
+    const company_id = req.user.company_id;
 
       await pool.query(
         `
@@ -87,5 +87,31 @@ const company_id = req.user.company_id;
     res.status(500).json({
       error: "Error actualizando categoría"
     });
+  }
+};
+
+exports.updateCategory = async (req, res) => {
+  try {
+
+    const { id } = req.params;
+    const { name, description } = req.body;
+    const company_id = req.user.company_id;
+
+    await pool.query(
+      `
+      UPDATE expense_categories
+      SET name = $1,
+          description = $2
+      WHERE id = $3
+        AND company_id = $4
+      `,
+      [name, description, id, company_id]
+    );
+
+    res.json({ success: true });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error actualizando categoría" });
   }
 };
