@@ -12,6 +12,8 @@ router.get('/', requireAuth, controller.getPackages);
 router.post('/assign', requireAuth, controller.assignPackage);
 router.get('/client/:id', requireAuth, controller.getClientPackages);
 
+router.get('/my-packages', requireAuth, controller.getMyPackages);
+
 router.put('/:id', requireAuth, controller.updatePackage);
 router.delete('/:id', requireAuth, controller.deletePackage);
 

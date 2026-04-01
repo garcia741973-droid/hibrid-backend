@@ -25,6 +25,10 @@ router.post(
   controller.autoCreateSessions
 );
 
+router.get('/my-sessions', requireAuth, controller.getMySessions);
+
+router.get('/my-package', requireAuth, controller.getMyPackage);
+
 router.get('/clients', requireAuth, controller.getClients);
 
 module.exports = router;

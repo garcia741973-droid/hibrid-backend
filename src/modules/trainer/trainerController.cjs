@@ -722,3 +722,98 @@ exports.getClients = async (req, res) => {
     });
   }
 };
+
+// =============================
+// 👤 MIS SESIONES (CLIENTE)
+// =============================
+exports.getMySessions = async (req, res) => {
+  try {
+
+    if (req.user.company_type !== 'trainer') {
+      return res.status(403).json({
+        error: 'Solo trainer'
+      });
+    }
+
+    const { rows } = await pool.query(
+      `
+      SELECT 
+        ts.*,
+        (ts.session_date || ' ' || ts.start_time) AS datetime
+      FROM trainer_sessions ts
+      WHERE ts.client_id = $1
+        AND ts.company_id = $2
+      ORDER BY ts.session_date, ts.start_time
+      `,
+      [
+        req.user.id,
+        req.user.company_id
+      ]
+    );
+
+    res.json(rows);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      error: 'Error obteniendo mis sesiones'
+    });
+  }
+};
+
+// =============================
+// 👤 MI SALDO DE SESIONES
+// =============================
+exports.getMyPackage = async (req, res) => {
+  try {
+
+    const { rows } = await pool.query(
+      `
+      SELECT
+        sessions_total,
+        sessions_used,
+        (sessions_total - sessions_used) AS sessions_left,
+        status
+      FROM trainer_client_packages
+      WHERE client_id = $1
+        AND company_id = $2
+        AND status = 'active'
+      LIMIT 1
+      `,
+      [req.user.id, req.user.company_id]
+    );
+
+    if (rows.length === 0) {
+      return res.json(null);
+    }
+
+    const pkg = rows[0];
+
+    const scheduledRes = await pool.query(
+      `
+      SELECT COUNT(*) as total
+      FROM trainer_sessions
+      WHERE client_id = $1
+        AND company_id = $2
+        AND status = 'scheduled'
+      `,
+      [req.user.id, req.user.company_id]
+    );
+
+    const scheduled = Number(scheduledRes.rows[0].total);
+
+    const realAvailable = pkg.sessions_left - scheduled;
+
+    res.json({
+      ...pkg,
+      sessions_scheduled: scheduled,
+      sessions_real_available: realAvailable
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      error: "Error obteniendo mi paquete"
+    });
+  }
+};
