@@ -34,11 +34,15 @@ router.get(
   async (req, res) => {
     try {
 
-      const { rows } = await pool.query(`
-        SELECT id, name, email
-        FROM users
-        WHERE role IN ('admin', 'superadmin')
-      `);
+    const { rows } = await pool.query(
+      `
+      SELECT id, name, email
+      FROM users
+      WHERE role IN ('admin', 'superadmin')
+      AND company_id = $1
+      `,
+      [req.user.company_id]
+    );
 
       res.json(rows);
 
