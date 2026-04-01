@@ -143,14 +143,21 @@ exports.createSale = async (req,res)=>{
       );
 
         /// DESCUENTA STOCK
-        await client.query(
+        const update = await client.query(
           `
           UPDATE products
           SET stock = stock - $1
-          WHERE id=$2 AND company_id=$3
+          WHERE id=$2 
+          AND company_id=$3
+          AND stock >= $1
+          RETURNING stock
           `,
           [item.quantity, item.product_id, companyId]
         );
+
+        if(update.rows.length === 0){
+          throw new Error('Stock insuficiente (concurrente)');
+        }
 
         /// 🔥 REGISTRAR SALIDA (VENTA)
         await client.query(
