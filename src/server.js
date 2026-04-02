@@ -19,10 +19,6 @@ app.use(express.json());
 app.use("/auth", authRoutes);
 app.use("/admin", adminRoutes);
 
-const userRoutes = require('../routes/user.cjs');
-app.use('/admin', userRoutes);
-
-
 
 const clientRoutes = require('./routes/client.cjs');
 const adminPlansRoutes = require('./routes/adminPlans.cjs');

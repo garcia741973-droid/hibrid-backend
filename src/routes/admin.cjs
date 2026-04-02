@@ -54,4 +54,183 @@ router.get(
   }
 );
 
+// =============================
+// 🔥 STAFF
+// =============================
+
+// CREAR STAFF
+router.post(
+  "/create-staff",
+  requireAuth,
+  requireRole(["admin","superadmin"]),
+  async (req, res) => {
+
+    try {
+
+      const { name, last_name, email, password, phone } = req.body;
+
+      if (req.user.company_type !== "gym") {
+        return res.status(403).json({
+          error: "Solo gimnasios pueden crear staff"
+        });
+      }
+
+      if (!name || !email || !password) {
+        return res.status(400).json({
+          error: "Faltan datos obligatorios"
+        });
+      }
+
+      const bcrypt = require("bcrypt");
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      const { rows } = await pool.query(
+        `
+        INSERT INTO users
+        (name,last_name,email,password,phone,role,company_id,created_at)
+        VALUES ($1,$2,$3,$4,$5,'staff',$6,NOW())
+        RETURNING id,name,email,role
+        `,
+        [
+          name,
+          last_name || "",
+          email,
+          hashedPassword,
+          phone || "",
+          req.user.company_id
+        ]
+      );
+
+      res.json({
+        message: "Staff creado",
+        staff: rows[0]
+      });
+
+    } catch (error) {
+
+      console.error(error);
+
+      res.status(500).json({
+        error: "Error creando staff"
+      });
+
+    }
+
+  }
+);
+
+// LISTAR STAFF
+router.get(
+  "/staff",
+  requireAuth,
+  requireRole(["admin","superadmin"]),
+  async (req, res) => {
+
+    try {
+
+      const { rows } = await pool.query(
+        `
+        SELECT id, name, last_name, email, phone
+        FROM users
+        WHERE role = 'staff'
+        AND company_id = $1
+        ORDER BY created_at DESC
+        `,
+        [req.user.company_id]
+      );
+
+      res.json(rows);
+
+    } catch (err) {
+
+      console.error(err);
+
+      res.status(500).json({
+        error: "Error obteniendo staff"
+      });
+
+    }
+
+  }
+);
+
+// ACTUALIZAR STAFF
+router.put(
+  "/update-staff/:id",
+  requireAuth,
+  requireRole(["admin","superadmin"]),
+  async (req, res) => {
+
+    try {
+
+      const { id } = req.params;
+      const { name, last_name, phone, password } = req.body;
+
+      let hashedPassword = null;
+
+      if (password && password.length > 0) {
+        const bcrypt = require("bcrypt");
+        hashedPassword = await bcrypt.hash(password, 10);
+      }
+
+      let query;
+      let values;
+
+      if (hashedPassword) {
+
+        query = `
+          UPDATE users
+          SET name=$1, last_name=$2, phone=$3, password=$4
+          WHERE id=$5 AND company_id=$6
+          RETURNING id,name,email
+        `;
+
+        values = [
+          name,
+          last_name,
+          phone,
+          hashedPassword,
+          id,
+          req.user.company_id
+        ];
+
+      } else {
+
+        query = `
+          UPDATE users
+          SET name=$1, last_name=$2, phone=$3
+          WHERE id=$4 AND company_id=$5
+          RETURNING id,name,email
+        `;
+
+        values = [
+          name,
+          last_name,
+          phone,
+          id,
+          req.user.company_id
+        ];
+      }
+
+      const { rows } = await pool.query(query, values);
+
+      res.json({
+        message: "Staff actualizado",
+        staff: rows[0]
+      });
+
+    } catch (err) {
+
+      console.error(err);
+
+      res.status(500).json({
+        error: "Error actualizando staff"
+      });
+
+    }
+
+  }
+);
+
+
 module.exports = router;
