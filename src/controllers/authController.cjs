@@ -37,7 +37,11 @@ exports.login = async (req,res)=>{
 
   const result = await pool.query(
   `
-  SELECT u.*, c.type as company_type
+  SELECT 
+  u.*, 
+  c.type as company_type,
+  c.name as company_name,
+  c.logo_url as company_logo
   FROM users u
   JOIN companies c ON u.company_id = c.id
   WHERE u.email = $1
@@ -70,14 +74,18 @@ exports.login = async (req,res)=>{
   );
 
   res.json({
-  token,
-  user:{
-    id:user.id,
-    name:user.name,
-    role:user.role,
-    company_id: user.company_id,
-    company_type: user.company_type // 🔥 NUEVO
-  }
+    token,
+    user:{
+      id:user.id,
+      name:user.name,
+      role:user.role,
+      company_id: user.company_id,
+      company_type: user.company_type
+    },
+    company:{
+      name: user.company_name,
+      logo_url: user.company_logo
+    }
   });
 
  }catch(error){
