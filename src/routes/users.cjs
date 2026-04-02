@@ -149,4 +149,82 @@ router.post(
 
   });
 
+  router.put(
+    '/admin/update-staff/:id',
+    requireAuth,
+    async (req, res) => {
+
+      try {
+
+        const { id } = req.params;
+
+        const {
+          name,
+          last_name,
+          phone,
+          password
+        } = req.body;
+
+        const companyId = req.user.company_id;
+
+        /// 🔒 SOLO GYM
+        if (req.user.company_type !== 'gym') {
+          return res.status(403).json({
+            error: "No autorizado"
+          });
+        }
+
+        let hashedPassword = null;
+
+        if(password && password.length > 0){
+          const bcrypt = require('bcrypt');
+          hashedPassword = await bcrypt.hash(password, 10);
+        }
+
+        let query;
+        let values;
+
+        if(hashedPassword){
+
+          query = `
+            UPDATE users
+            SET name=$1, last_name=$2, phone=$3, password=$4
+            WHERE id=$5 AND company_id=$6
+            RETURNING id,name,email
+          `;
+
+          values = [name, last_name, phone, hashedPassword, id, companyId];
+
+        }else{
+
+          query = `
+            UPDATE users
+            SET name=$1, last_name=$2, phone=$3
+            WHERE id=$4 AND company_id=$5
+            RETURNING id,name,email
+          `;
+
+          values = [name, last_name, phone, id, companyId];
+
+        }
+
+        const { rows } = await pool.query(query, values);
+
+        res.json({
+          message: "Staff actualizado",
+          staff: rows[0]
+        });
+
+      } catch (err) {
+
+        console.error(err);
+
+        res.status(500).json({
+          error: "Error actualizando staff"
+        });
+
+      }
+
+  });
+
 });
