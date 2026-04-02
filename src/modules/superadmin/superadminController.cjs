@@ -16,7 +16,8 @@ exports.createCompany = async (req, res) => {
       contact_phone,
       contact_email,
       city,
-      country
+      country,
+      logo_url // 🔥 NUEVO
     } = req.body;
 
     if (!name || !type || !plan_id) {
@@ -66,21 +67,23 @@ exports.createCompany = async (req, res) => {
         contact_phone,
         contact_email,
         city,
-        country
+        country,
+        logo_url
       )
-      VALUES ($1,$2,$3,'active',$4,$5,$6,$7,$8,$9)
+      VALUES ($1,$2,$3,'active',$4,$5,$6,$7,$8,$9,$10)
       RETURNING *
       `,
       [
         name,
-        type || 'gym', // 🔥 AQUÍ SÍ VA
+        type || 'gym',
         plan_id,
         expiration,
         contact_name || '',
         contact_phone || '',
         contact_email || '',
         city || '',
-        country || ''
+        country || '',
+        logo_url || null // 🔥 NUEVO
       ]
     );
 
@@ -103,21 +106,22 @@ exports.getCompanies = async (req, res) => {
 
     const { rows } = await pool.query(
       `
-      SELECT 
-        c.id,
-        c.name,
-        c.type,
-        c.subscription_status,
-        c.expiration_date,
-        c.plan_id,
-        c.contact_name,
-        c.contact_phone,
-        c.contact_email,
-        c.city,
-        c.country,
-        c.address,
-        p.name AS plan_name,
-        p.price AS plan_price
+    SELECT 
+      c.id,
+      c.name,
+      c.type,
+      c.logo_url, -- 🔥 NUEVO
+      c.subscription_status,
+      c.expiration_date,
+      c.plan_id,
+      c.contact_name,
+      c.contact_phone,
+      c.contact_email,
+      c.city,
+      c.country,
+      c.address,
+      p.name AS plan_name,
+      p.price AS plan_price
       FROM companies c
       LEFT JOIN company_plans p ON c.plan_id = p.id
       ORDER BY c.created_at DESC
@@ -279,11 +283,12 @@ exports.getCompanyStatus = async (req, res) => {
 
     const { rows } = await pool.query(
       `
-      SELECT 
-        c.name,
-        c.subscription_status,
-        c.expiration_date,
-        p.name AS plan_name
+    SELECT 
+      c.name,
+      c.logo_url, -- 🔥 NUEVO
+      c.subscription_status,
+      c.expiration_date,
+      p.name AS plan_name
       FROM companies c
       LEFT JOIN company_plans p ON c.plan_id = p.id
       WHERE c.id = $1
@@ -503,4 +508,3 @@ exports.getCompanyPayments = async (req, res) => {
     });
   }
 };
-
