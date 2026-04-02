@@ -68,11 +68,4 @@ router.get(
   controller.getCompanyPayments
 );
 
-router.put(
-  '/companies/:id',
-  requireAuth,
-  requireRole(['superadmin']),
-  updateCompany
-);
-
 module.exports = router;
