@@ -508,3 +508,60 @@ exports.getCompanyPayments = async (req, res) => {
     });
   }
 };
+
+// =============================
+// 🔥 EDITAR EMPRESA
+// =============================
+exports.updateCompany = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const {
+      name,
+      logo_url,
+      primary_color,
+      secondary_color,
+      contact_name,
+      contact_phone,
+      contact_email,
+      city,
+      country
+    } = req.body;
+
+    const { rows } = await pool.query(
+      `
+      UPDATE companies
+      SET
+        name = COALESCE($1, name),
+        logo_url = COALESCE($2, logo_url),
+        primary_color = COALESCE($3, primary_color),
+        secondary_color = COALESCE($4, secondary_color),
+        contact_name = COALESCE($5, contact_name),
+        contact_phone = COALESCE($6, contact_phone),
+        contact_email = COALESCE($7, contact_email),
+        city = COALESCE($8, city),
+        country = COALESCE($9, country)
+      WHERE id = $10
+      RETURNING *
+      `,
+      [
+        name,
+        logo_url,
+        primary_color,
+        secondary_color,
+        contact_name,
+        contact_phone,
+        contact_email,
+        city,
+        country,
+        id
+      ]
+    );
+
+    res.json(rows[0]);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error actualizando empresa" });
+  }
+};
