@@ -134,6 +134,7 @@ router.get(
         FROM users
         WHERE role = 'staff'
         AND company_id = $1
+        AND is_active = true
         ORDER BY created_at DESC
         `,
         [req.user.company_id]
@@ -232,5 +233,51 @@ router.put(
   }
 );
 
+// =============================
+// 🔥 ELIMINAR STAFF
+// =============================
+router.delete(
+  "/delete-staff/:id",
+  requireAuth,
+  requireRole(["admin","superadmin"]),
+  async (req, res) => {
+
+    try {
+
+      const { id } = req.params;
+
+      const { rows } = await pool.query(
+        `
+        UPDATE users
+        SET is_active = false
+        WHERE id = $1
+        AND company_id = $2
+        RETURNING id
+        `,
+        [id, req.user.company_id]
+      );
+
+      if (rows.length === 0) {
+        return res.status(404).json({
+          error: "Staff no encontrado"
+        });
+      }
+
+      res.json({
+        message: "Staff eliminado"
+      });
+
+    } catch (err) {
+
+      console.error(err);
+
+      res.status(500).json({
+        error: "Error eliminando staff"
+      });
+
+    }
+
+  }
+);
 
 module.exports = router;
