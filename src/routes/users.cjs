@@ -227,4 +227,38 @@ router.post(
 
   });
 
+  router.get(
+    '/admin/staff',
+    requireAuth,
+    async (req, res) => {
+
+      try {
+
+        const companyId = req.user.company_id;
+
+        const { rows } = await pool.query(
+          `
+          SELECT id, name, last_name, email, phone
+          FROM users
+          WHERE role = 'staff'
+          AND company_id = $1
+          ORDER BY created_at DESC
+          `,
+          [companyId]
+        );
+
+        res.json(rows);
+
+      } catch (err) {
+
+        console.error(err);
+
+        res.status(500).json({
+          error: "Error obteniendo staff"
+        });
+
+      }
+
+  });  
+
 });
