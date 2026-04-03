@@ -37,14 +37,15 @@ exports.login = async (req,res)=>{
 
   const result = await pool.query(
   `
-  SELECT 
-  u.*, 
-  c.type as company_type,
-  c.name as company_name,
-  c.logo_url as company_logo
-  FROM users u
-  JOIN companies c ON u.company_id = c.id
-  WHERE u.email = $1
+    SELECT 
+    u.*, 
+    c.id as company_id_real,
+    c.type as company_type,
+    c.name as company_name,
+    c.logo_url as company_logo
+    FROM users u
+    JOIN companies c ON u.company_id = c.id
+    WHERE u.email = $1
   `,
   [email]
   );
@@ -83,6 +84,7 @@ exports.login = async (req,res)=>{
       company_type: user.company_type
     },
     company:{
+      id: user.company_id_real,
       name: user.company_name,
       logo_url: user.company_logo
     }
