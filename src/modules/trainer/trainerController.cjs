@@ -878,8 +878,12 @@ exports.getSessionReminders = async (req, res) => {
 
       console.log("📅 RAW:", s.session_date, s.start_time);
 
+      // 🔥 LIMPIAR FECHA (IMPORTANTE)
+      const dateOnly = new Date(s.session_date).toISOString().split("T")[0];
+
+      // 🔥 ARMAR FECHA CORRECTA
       const sessionDateTime = new Date(
-        `${s.session_date} ${s.start_time} GMT-0400`
+        `${dateOnly}T${s.start_time}-04:00`
       );
 
       console.log("📅 SESSION PARSED:", sessionDateTime);
