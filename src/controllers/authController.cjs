@@ -97,3 +97,36 @@ exports.login = async (req,res)=>{
  }
 
 };
+
+// =============================
+// 🔔 ACTUALIZAR RECORDATORIO
+// =============================
+exports.updateReminder = async (req, res) => {
+  try {
+
+    const { reminder_minutes } = req.body;
+
+    if (!reminder_minutes) {
+      return res.status(400).json({
+        error: "reminder_minutes requerido"
+      });
+    }
+
+    await pool.query(
+      `
+      UPDATE users
+      SET reminder_minutes = $1
+      WHERE id = $2
+      `,
+      [reminder_minutes, req.user.id]
+    );
+
+    res.json({ ok: true });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      error: "Error actualizando recordatorio"
+    });
+  }
+};
