@@ -81,6 +81,26 @@ cron.schedule("* * * * *", async () => {
 
     console.log("🔥 RECORDATORIOS ENCONTRADOS:", sessions.length);
 
+    for (const s of sessions) {
+
+      if (!s.fcm_token) {
+        console.log("❌ Sin token:", s.client_id);
+        continue;
+      }
+
+      await axios.post(`${API_URL}/notifications/send`, {
+        token: s.fcm_token,
+        title: "Entrenamiento próximo 💪",
+        body: `Hola ${s.name}, tienes sesión pronto`,
+        data: {
+          type: "session_reminder",
+          sessionId: s.id.toString()
+        }
+      });
+
+      console.log("✅ Notificación enviada a:", s.name);
+    }
+
   } catch (error) {
     console.error("❌ ERROR CRON:", error.message);
   }
