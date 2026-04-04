@@ -102,6 +102,9 @@ exports.login = async (req,res)=>{
 // 🔔 ACTUALIZAR RECORDATORIO
 // =============================
 exports.updateReminder = async (req, res) => {
+
+  console.log("🔥 UPDATE REMINDER:", req.body, req.user.id);
+
   try {
 
     const { reminder_minutes } = req.body;
