@@ -61,9 +61,29 @@ app.listen(PORT, () => {
 });
 
 const cron = require("node-cron");
+const axios = require("axios");
 
-cron.schedule("* * * * *", () => {
-  console.log("⏰ CRON FUNCIONANDO...");
+const API_URL = "https://hibrid-backend.onrender.com";
+
+cron.schedule("* * * * *", async () => {
+  try {
+
+    console.log("⏰ CRON EJECUTANDO...");
+
+    const res = await axios.get(`${API_URL}/trainer/reminders`);
+
+    const sessions = res.data;
+
+    if (!sessions || sessions.length === 0) {
+      console.log("📭 No hay recordatorios");
+      return;
+    }
+
+    console.log("🔥 RECORDATORIOS ENCONTRADOS:", sessions.length);
+
+  } catch (error) {
+    console.error("❌ ERROR CRON:", error.message);
+  }
 });
 
 const membershipRoutes = require('./routes/membership.cjs');
