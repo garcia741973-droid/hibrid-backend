@@ -8,11 +8,26 @@ module.exports = async (req, res, next) => {
     req.headers['Authorization'] ||
     req.get('Authorization');
 
+    console.log("🔐 AUTH HEADER:", authHeader);
+
   if (!authHeader) {
     return res.status(401).json({ error: "Token requerido" });
   }
 
-  const token = authHeader.split(" ")[1];
+  const parts = authHeader.split(" ");
+
+  if (parts.length !== 2 || parts[0] !== "Bearer") {
+    console.log("❌ HEADER MAL FORMADO:", authHeader);
+    return res.status(401).json({ error: "Token inválido" });
+  }
+
+  const token = parts[1];
+
+  // 🔥 BLOQUEAR TOKENS MALOS
+  if (!token || token === "null" || token === "undefined") {
+    console.log("❌ TOKEN VACÍO O INVÁLIDO:", token);
+    return res.status(401).json({ error: "Token inválido" });
+  }
 
   try {
 
