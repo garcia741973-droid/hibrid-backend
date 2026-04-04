@@ -843,6 +843,9 @@ exports.getMyPackage = async (req, res) => {
 // 🔔 RECORDATORIOS DE SESIONES
 // =============================
 exports.getSessionReminders = async (req, res) => {
+
+  console.log("🕒 NOW SERVER:", new Date());
+
   try {
 
     const now = new Date();
