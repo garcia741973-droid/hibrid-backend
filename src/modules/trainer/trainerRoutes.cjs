@@ -31,4 +31,10 @@ router.get('/my-package', requireAuth, controller.getMyPackage);
 
 router.get('/clients', requireAuth, controller.getClients);
 
+// =============================
+// 🔔 RECORDATORIOS
+// =============================
+router.get('/reminders', controller.getSessionReminders);
+router.post('/reminder-sent', controller.markReminderSent);
+
 module.exports = router;

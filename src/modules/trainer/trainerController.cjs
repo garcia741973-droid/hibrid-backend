@@ -817,3 +817,86 @@ exports.getMyPackage = async (req, res) => {
     });
   }
 };
+
+// =============================
+// 🔔 RECORDATORIOS DE SESIONES
+// =============================
+exports.getSessionReminders = async (req, res) => {
+  try {
+
+    const now = new Date();
+
+    // 🔥 margen de 5 minutos
+    const next5 = new Date(now.getTime() + 5 * 60000);
+
+    const { rows } = await pool.query(
+      `
+      SELECT 
+        ts.id,
+        ts.session_date,
+        ts.start_time,
+        ts.client_id,
+        u.fcm_token,
+        u.name
+      FROM trainer_sessions ts
+      JOIN users u ON u.id = ts.client_id
+      WHERE ts.status = 'scheduled'
+        AND ts.reminder_sent = false
+        AND ts.client_id IS NOT NULL
+      `
+    );
+
+    const toNotify = [];
+
+    for (let s of rows) {
+
+      const sessionDateTime = new Date(
+        `${s.session_date}T${s.start_time}`
+      );
+
+      // 🔥 FIJO: 60 min antes (primera versión segura)
+      const reminderTime = new Date(
+        sessionDateTime.getTime() - 60 * 60000
+      );
+
+      if (reminderTime >= now && reminderTime <= next5) {
+        toNotify.push(s);
+      }
+    }
+
+    res.json(toNotify);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      error: 'Error obteniendo recordatorios'
+    });
+  }
+};
+
+// =============================
+// 🔔 MARCAR RECORDATORIO ENVIADO
+// =============================
+exports.markReminderSent = async (req, res) => {
+  try {
+
+    const { session_id } = req.body;
+
+    await pool.query(
+      `
+      UPDATE trainer_sessions
+      SET reminder_sent = true
+      WHERE id = $1
+      `,
+      [session_id]
+    );
+
+    res.json({ ok: true });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      error: 'Error actualizando reminder'
+    });
+  }
+};
