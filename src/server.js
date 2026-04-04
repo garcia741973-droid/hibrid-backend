@@ -126,7 +126,11 @@ app.use('/admin', adminPaymentQrRoutes);
 
 const superadminRoutes = require('./modules/superadmin/superadminRoutes.cjs');
 
+const notificationsRoutes = require('./modules/notifications/notificationsRoutes.cjs');
+
 app.use('/superadmin', superadminRoutes);
+
+app.use('/notifications', notificationsRoutes);
 
 const requireAuth = require("./middlewares/requireAuth.cjs"); // 👈 arriba del archivo
 
