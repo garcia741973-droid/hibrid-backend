@@ -62,6 +62,10 @@ app.listen(PORT, () => {
 
 const cron = require("node-cron");
 
+cron.schedule("* * * * *", () => {
+  console.log("⏰ CRON FUNCIONANDO...");
+});
+
 const membershipRoutes = require('./routes/membership.cjs');
 
 app.use('/', membershipRoutes);
