@@ -825,9 +825,7 @@ exports.getSessionReminders = async (req, res) => {
   try {
 
     const now = new Date();
-
-    // 🔥 margen de 5 minutos
-    const next5 = new Date(now.getTime() + 5 * 60000);
+    const fiveMinutesAgo = new Date(now.getTime() - 5 * 60000);
 
     const { rows } = await pool.query(
       `
@@ -837,7 +835,8 @@ exports.getSessionReminders = async (req, res) => {
         ts.start_time,
         ts.client_id,
         u.fcm_token,
-        u.name
+        u.name,
+        u.reminder_minutes
       FROM trainer_sessions ts
       JOIN users u ON u.id = ts.client_id
       WHERE ts.status = 'scheduled'
@@ -854,12 +853,16 @@ exports.getSessionReminders = async (req, res) => {
         `${s.session_date}T${s.start_time}`
       );
 
-      // 🔥 FIJO: 60 min antes (primera versión segura)
+      const minutes = s.reminder_minutes || 60;
+
       const reminderTime = new Date(
-        sessionDateTime.getTime() - 60 * 60000
+        sessionDateTime.getTime() - minutes * 60000
       );
 
-      if (reminderTime >= now && reminderTime <= next5) {
+      if (
+        reminderTime <= now &&
+        reminderTime >= fiveMinutesAgo
+      ) {
         toNotify.push(s);
       }
     }
