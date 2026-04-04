@@ -874,9 +874,10 @@ exports.getSessionReminders = async (req, res) => {
 
     for (let s of rows) {
 
-      const sessionDateTime = new Date(
-        `${s.session_date}T${s.start_time}`
-      );
+    const tzOffset = "-04:00"; // Bolivia
+    const sessionDateTime = new Date(
+      `${s.session_date}T${s.start_time}${tzOffset}`
+    );
 
       const minutes = s.reminder_minutes || 60;
 
