@@ -874,10 +874,15 @@ exports.getSessionReminders = async (req, res) => {
 
     for (let s of rows) {
 
-    const tzOffset = "-04:00"; // Bolivia
-    const sessionDateTime = new Date(
-      `${s.session_date}T${s.start_time}${tzOffset}`
-    );
+      console.log("🕒 NOW:", now);
+
+      console.log("📅 RAW:", s.session_date, s.start_time);
+
+      const sessionDateTime = new Date(
+        `${s.session_date} ${s.start_time} GMT-0400`
+      );
+
+      console.log("📅 SESSION PARSED:", sessionDateTime);
 
       const minutes = s.reminder_minutes || 60;
 
@@ -885,11 +890,16 @@ exports.getSessionReminders = async (req, res) => {
         sessionDateTime.getTime() - minutes * 60000
       );
 
-    if (
-      reminderTime <= now &&
-      reminderTime >= windowStart
-    ) {
+      console.log("⏰ REMINDER TIME:", reminderTime);
+
+      if (
+        reminderTime <= now &&
+        reminderTime >= windowStart
+      ) {
+        console.log("✅ ENTRA AL RECORDATORIO");
         toNotify.push(s);
+      } else {
+        console.log("❌ NO ENTRA");
       }
     }
 
