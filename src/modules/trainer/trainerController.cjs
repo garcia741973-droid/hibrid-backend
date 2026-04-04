@@ -37,15 +37,16 @@ exports.createSession = async (req, res) => {
 
         // 🔥 1. OBTENER PAQUETE
         const pkgCheck = await pool.query(
-            `
-            SELECT id, sessions_total, sessions_used
-            FROM trainer_client_packages
-            WHERE client_id = $1
-            AND company_id = $2
-            AND status = 'active'
-            LIMIT 1
-            `,
-            [client_id, req.user.company_id]
+          `
+          SELECT 
+            SUM(sessions_total) as total,
+            SUM(sessions_used) as used
+          FROM trainer_client_packages
+          WHERE client_id = $1
+          AND company_id = $2
+          AND status = 'active'
+          `,
+          [client_id, req.user.company_id]
         );
 
         if (pkgCheck.rows.length === 0) {
@@ -57,7 +58,7 @@ exports.createSession = async (req, res) => {
         const pkg = pkgCheck.rows[0];
 
         const sessionsLeft =
-            Number(pkg.sessions_total) - Number(pkg.sessions_used);
+            Number(pkg.total || 0) - Number(pkg.used || 0);
 
         // 🔥 2. CONTAR SESIONES FUTURAS (no completadas)
         const futureSessions = await pool.query(
@@ -235,40 +236,56 @@ exports.updateSessionStatus = async (req, res) => {
         session.status !== 'no_show' &&
         session.client_id
         ) {
-      const pkgRes = await client.query(
-        `
-        SELECT id, sessions_total, sessions_used, status
-        FROM trainer_client_packages
-        WHERE client_id = $1
-          AND company_id = $2
-          AND status = 'active'
-        ORDER BY created_at ASC
-        LIMIT 1
-        `,
-        [session.client_id, req.user.company_id]
-      );
+    // 🔥 TRAER TODOS LOS PAQUETES ACTIVOS (FIFO)
+    const pkgsRes = await client.query(
+      `
+      SELECT id, sessions_total, sessions_used
+      FROM trainer_client_packages
+      WHERE client_id = $1
+        AND company_id = $2
+        AND status = 'active'
+      ORDER BY created_at ASC
+      `,
+      [session.client_id, req.user.company_id]
+    );
 
-      if (pkgRes.rows.length === 0) {
-        throw new Error('Cliente no tiene paquete activo');
-      }
+    if (pkgsRes.rows.length === 0) {
+      throw new Error('Cliente no tiene paquete activo');
+    }
 
-      const pkg = pkgRes.rows[0];
-      const newUsed = Number(pkg.sessions_used) + 1;
-      const newStatus = newUsed >= Number(pkg.sessions_total)
-        ? 'completed'
-        : 'active';
+    let remaining = 1;
+
+    for (const pkg of pkgsRes.rows) {
+
+      const available =
+        Number(pkg.sessions_total) - Number(pkg.sessions_used);
+
+      if (available <= 0) continue;
+
+      const toUse = Math.min(remaining, available);
+
+      const newUsed = Number(pkg.sessions_used) + toUse;
+
+      const newStatus =
+        newUsed >= Number(pkg.sessions_total)
+          ? 'completed'
+          : 'active';
 
       await client.query(
         `
         UPDATE trainer_client_packages
-        SET
-          sessions_used = $1,
-          status = $2
+        SET sessions_used = $1,
+            status = $2
         WHERE id = $3
           AND company_id = $4
         `,
         [newUsed, newStatus, pkg.id, req.user.company_id]
       );
+
+      remaining -= toUse;
+
+      if (remaining <= 0) break;
+    }
     }
 
     await client.query('COMMIT');
@@ -513,15 +530,12 @@ exports.getClientPackage = async (req, res) => {
     const pkgRes = await pool.query(
       `
       SELECT
-        sessions_total,
-        sessions_used,
-        (sessions_total - sessions_used) AS sessions_left,
-        status
+        SUM(sessions_total) as total,
+        SUM(sessions_used) as used
       FROM trainer_client_packages
       WHERE client_id = $1
         AND company_id = $2
         AND status = 'active'
-      LIMIT 1
       `,
       [client_id, req.user.company_id]
     );
@@ -546,10 +560,15 @@ exports.getClientPackage = async (req, res) => {
 
     const scheduled = Number(scheduledRes.rows[0].total);
 
-    const realAvailable = pkg.sessions_left - scheduled;
+    const sessions_left =
+      Number(pkg.total || 0) - Number(pkg.used || 0);
+
+    const realAvailable = sessions_left - scheduled;
 
     res.json({
-      ...pkg,
+      sessions_total: pkg.total,
+      sessions_used: pkg.used,
+      sessions_left,
       sessions_scheduled: scheduled,
       sessions_real_available: realAvailable
     });
@@ -770,15 +789,12 @@ exports.getMyPackage = async (req, res) => {
     const { rows } = await pool.query(
       `
       SELECT
-        sessions_total,
-        sessions_used,
-        (sessions_total - sessions_used) AS sessions_left,
-        status
+        SUM(sessions_total) as total,
+        SUM(sessions_used) as used
       FROM trainer_client_packages
       WHERE client_id = $1
         AND company_id = $2
         AND status = 'active'
-      LIMIT 1
       `,
       [req.user.id, req.user.company_id]
     );
@@ -788,6 +804,9 @@ exports.getMyPackage = async (req, res) => {
     }
 
     const pkg = rows[0];
+
+    const sessions_left =
+      Number(pkg.total || 0) - Number(pkg.used || 0);
 
     const scheduledRes = await pool.query(
       `
@@ -802,12 +821,14 @@ exports.getMyPackage = async (req, res) => {
 
     const scheduled = Number(scheduledRes.rows[0].total);
 
-    const realAvailable = pkg.sessions_left - scheduled;
+    const realAvailable = sessions_left - scheduled;
 
     res.json({
-      ...pkg,
+      sessions_total: pkg.total,
+      sessions_used: pkg.used,
+      sessions_left,
       sessions_scheduled: scheduled,
-      sessions_real_available: realAvailable
+      sessions_real_available: sessions_left - scheduled
     });
 
   } catch (err) {
