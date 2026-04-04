@@ -60,6 +60,8 @@ app.listen(PORT, () => {
   console.log(`Servidor corriendo en puerto ${PORT}`);
 });
 
+const cron = require("node-cron");
+
 const membershipRoutes = require('./routes/membership.cjs');
 
 app.use('/', membershipRoutes);
