@@ -846,7 +846,8 @@ exports.getSessionReminders = async (req, res) => {
   try {
 
     const now = new Date();
-    const fiveMinutesAgo = new Date(now.getTime() - 5 * 60000);
+    const windowMinutes = 15; // 🔥 MISMO VALOR QUE EL RECORDATORIO
+    const windowStart = new Date(now.getTime() - windowMinutes * 60000);
 
     const { rows } = await pool.query(
       `
@@ -880,10 +881,10 @@ exports.getSessionReminders = async (req, res) => {
         sessionDateTime.getTime() - minutes * 60000
       );
 
-      if (
-        reminderTime <= now &&
-        reminderTime >= fiveMinutesAgo
-      ) {
+    if (
+      reminderTime <= now &&
+      reminderTime >= windowStart
+    ) {
         toNotify.push(s);
       }
     }
