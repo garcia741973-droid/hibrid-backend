@@ -133,3 +133,21 @@ exports.updateReminder = async (req, res) => {
     });
   }
 };
+
+// =============================
+// 🔔 OBTENER RECORDATORIO
+// =============================
+exports.getReminder = async (req, res) => {
+  try {
+
+    const result = await pool.query(
+      `SELECT reminder_minutes FROM users WHERE id = $1`,
+      [req.user.id]
+    );
+
+    res.json(result.rows[0]);
+
+  } catch (error) {
+    res.status(500).json({ error: "Error obteniendo recordatorio" });
+  }
+};

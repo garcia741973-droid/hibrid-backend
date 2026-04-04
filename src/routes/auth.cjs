@@ -10,4 +10,6 @@ router.post("/login", authController.login);
 // 🔔 RECORDATORIO
 router.put("/reminder", requireAuth, authController.updateReminder);
 
+router.get("/reminder", requireAuth, authController.getReminder);
+
 module.exports = router;
