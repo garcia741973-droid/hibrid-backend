@@ -2,6 +2,10 @@ const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
 
+const admin = require("firebase-admin");
+
+admin.initializeApp();
+
 const { pool } = require("./config/db");
 
 const authRoutes = require("./routes/auth.cjs");
