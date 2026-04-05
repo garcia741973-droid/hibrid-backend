@@ -849,8 +849,6 @@ exports.getSessionReminders = async (req, res) => {
   try {
 
     const now = new Date();
-    const windowMinutes = 15; // 🔥 MISMO VALOR QUE EL RECORDATORIO
-    const windowStart = new Date(now.getTime() - windowMinutes * 60000);
 
     const { rows } = await pool.query(
       `
@@ -861,7 +859,7 @@ exports.getSessionReminders = async (req, res) => {
         ts.client_id,
         u.fcm_token,
         u.name,
-        u.reminder_minutes
+        ts.reminder_minutes
       FROM trainer_sessions ts
       JOIN users u ON u.id = ts.client_id
       WHERE ts.status = 'scheduled'
@@ -896,10 +894,7 @@ exports.getSessionReminders = async (req, res) => {
 
       console.log("⏰ REMINDER TIME:", reminderTime);
 
-      if (
-        reminderTime <= now &&
-        reminderTime >= windowStart
-      ) {
+      if (reminderTime <= now) {
         console.log("✅ ENTRA AL RECORDATORIO");
         toNotify.push(s);
       } else {
