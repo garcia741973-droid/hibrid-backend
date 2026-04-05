@@ -102,7 +102,7 @@ exports.createSession = async (req, res) => {
         reminder_minutes,
         reminder_sent
       )
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,false)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
       RETURNING *
       `,
       [
@@ -599,7 +599,8 @@ exports.autoCreateSessions = async (req, res) => {
       client_id,
       days,
       start_time,
-      end_time
+      end_time,
+      sessions_to_create
     } = req.body;
 
     const companyId = req.user.company_id;
@@ -649,7 +650,27 @@ exports.autoCreateSessions = async (req, res) => {
     const created = [];
 
     // 🔥 3. GENERAR SESIONES
-    while (created.length < sessionsLeft) {
+    const limit =
+      sessions_to_create !== undefined && sessions_to_create !== null
+        ? sessions_to_create
+        : sessionsLeft;
+
+        if (limit <= 0) {
+          return res.status(400).json({
+            error: "Debes crear al menos 1 sesión"
+          });
+        }
+
+        if (
+          sessions_to_create !== undefined &&
+          sessions_to_create > sessionsLeft
+        ) {
+          return res.status(400).json({
+            error: "No puedes crear más sesiones de las disponibles"
+          });
+        }
+
+    while (created.length < limit) {
 
       const day = currentDate.getDay(); // 0-6
 
@@ -669,9 +690,11 @@ exports.autoCreateSessions = async (req, res) => {
             session_date,
             start_time,
             end_time,
-            status
+            status,
+            reminder_minutes,
+            reminder_sent
           )
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'scheduled')
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'scheduled',$9,false)
           RETURNING *
           `,
           [
@@ -682,7 +705,8 @@ exports.autoCreateSessions = async (req, res) => {
             '',
             dateStr,
             start_time,
-            end_time
+            end_time,
+            15 // o el valor que quieras default
           ]
         );
 
