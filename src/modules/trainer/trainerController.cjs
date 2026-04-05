@@ -921,8 +921,11 @@ exports.getSessionReminders = async (req, res) => {
 
       const nowTz = dayjs().tz(tz);
 
+      // 🔥 LIMPIAR FECHA
+      const cleanDate = dayjs(s.session_date).format('YYYY-MM-DD');
+
       const sessionDateTime = dayjs.tz(
-        `${s.session_date} ${s.start_time}`,
+        `${cleanDate} ${s.start_time}`,
         'YYYY-MM-DD HH:mm',
         tz
       );
