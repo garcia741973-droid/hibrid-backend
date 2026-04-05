@@ -17,7 +17,8 @@ exports.createCompany = async (req, res) => {
       contact_email,
       city,
       country,
-      logo_url // 🔥 NUEVO
+      logo_url,
+      timezone // 🔥 NUEVO
     } = req.body;
 
     if (!name || !type || !plan_id) {
@@ -68,9 +69,10 @@ exports.createCompany = async (req, res) => {
         contact_email,
         city,
         country,
-        logo_url
+        logo_url,
+        timezone
       )
-      VALUES ($1,$2,$3,'active',$4,$5,$6,$7,$8,$9,$10)
+      VALUES ($1,$2,$3,'active',$4,$5,$6,$7,$8,$9,$10,$11)
       RETURNING *
       `,
       [
@@ -83,7 +85,8 @@ exports.createCompany = async (req, res) => {
         contact_email || '',
         city || '',
         country || '',
-        logo_url || null // 🔥 NUEVO
+        logo_url || null,
+        timezone || 'America/La_Paz' // 🔥 NUEVO
       ]
     );
 
@@ -120,6 +123,7 @@ exports.getCompanies = async (req, res) => {
       c.city,
       c.country,
       c.address,
+      c.timezone,
       p.name AS plan_name,
       p.price AS plan_price
       FROM companies c

@@ -16,6 +16,8 @@
     "bcryptjs": "^3.0.3",
     "cloudinary": "^2.9.0",
     "cors": "^2.8.5",
+    "dayjs": "^1.11.20",
+    "dayjs-plugin-utc": "^0.1.2",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "firebase-admin": "^13.7.0",
