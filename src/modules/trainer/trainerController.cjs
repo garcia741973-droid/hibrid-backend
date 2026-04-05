@@ -11,8 +11,11 @@ exports.createSession = async (req, res) => {
       notes,
       session_date,
       start_time,
-      end_time
+      end_time,
+      reminder_minutes
     } = req.body;
+
+    const reminder = reminder_minutes ?? 15; // 🔥 default 15 min
 
     if (!session_date || !start_time || !end_time) {
       return res.status(400).json({
@@ -95,9 +98,11 @@ exports.createSession = async (req, res) => {
         notes,
         session_date,
         start_time,
-        end_time
+        end_time,
+        reminder_minutes,
+        reminder_sent
       )
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,false)
       RETURNING *
       `,
       [
@@ -108,7 +113,9 @@ exports.createSession = async (req, res) => {
         notes || '',
         session_date,
         start_time,
-        end_time
+        end_time,
+        reminder,
+        false
       ]
     );
 
@@ -886,7 +893,15 @@ exports.getSessionReminders = async (req, res) => {
 
       console.log("📅 SESSION PARSED:", sessionDateTime);
 
-      const minutes = s.reminder_minutes || 60;
+      const minutes =
+        s.reminder_minutes !== null && s.reminder_minutes !== undefined
+          ? s.reminder_minutes
+          : 60;
+
+      if (minutes === 0) {
+        console.log("🔕 Sin recordatorio:", s.id);
+        continue;
+      }
 
       const reminderTime = new Date(
         sessionDateTime.getTime() - minutes * 60000
