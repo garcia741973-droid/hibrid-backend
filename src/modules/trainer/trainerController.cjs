@@ -898,7 +898,7 @@ exports.getSessionReminders = async (req, res) => {
         u.fcm_token,
         u.name,
         ts.reminder_minutes,
-        c.timezone,
+        c.timezone
         FROM trainer_sessions ts
         JOIN users u ON u.id = ts.client_id
         JOIN companies c ON ts.company_id = c.id
