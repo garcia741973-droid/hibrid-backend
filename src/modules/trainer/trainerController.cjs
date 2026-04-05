@@ -1,5 +1,12 @@
 const { pool } = require('../../config/db');
 
+const dayjs = require('dayjs');
+const utc = require('dayjs/plugin/utc');
+const timezone = require('dayjs/plugin/timezone');
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
 // =============================
 // 🔥 CREAR SESIÓN
 // =============================
@@ -890,9 +897,11 @@ exports.getSessionReminders = async (req, res) => {
         ts.client_id,
         u.fcm_token,
         u.name,
-        ts.reminder_minutes
-      FROM trainer_sessions ts
-      JOIN users u ON u.id = ts.client_id
+        ts.reminder_minutes,
+        c.timezone,
+        FROM trainer_sessions ts
+        JOIN users u ON u.id = ts.client_id
+        JOIN companies c ON ts.company_id = c.id
       WHERE ts.status = 'scheduled'
         AND ts.reminder_sent = false
         AND ts.client_id IS NOT NULL
@@ -908,14 +917,15 @@ exports.getSessionReminders = async (req, res) => {
       console.log("📅 RAW:", s.session_date, s.start_time);
 
       // 🔥 LIMPIAR FECHA (IMPORTANTE)
-      const dateOnly = new Date(s.session_date).toISOString().split("T")[0];
+      const tz = s.timezone || 'America/La_Paz';
 
-      // 🔥 ARMAR FECHA CORRECTA
-      const sessionDateTime = new Date(
-        `${dateOnly}T${s.start_time}-04:00`
+      const nowTz = dayjs().tz(tz);
+
+      const sessionDateTime = dayjs.tz(
+        `${s.session_date} ${s.start_time}`,
+        'YYYY-MM-DD HH:mm',
+        tz
       );
-
-      console.log("📅 SESSION PARSED:", sessionDateTime);
 
       const minutes =
         s.reminder_minutes !== null && s.reminder_minutes !== undefined
@@ -927,13 +937,14 @@ exports.getSessionReminders = async (req, res) => {
         continue;
       }
 
-      const reminderTime = new Date(
-        sessionDateTime.getTime() - minutes * 60000
-      );
+      const reminderTime = sessionDateTime.subtract(minutes, 'minute');
 
-      console.log("⏰ REMINDER TIME:", reminderTime);
+      console.log("🌎 TZ:", tz);
+      console.log("🕒 NOW:", nowTz.format());
+      console.log("📅 SESSION:", sessionDateTime.format());
+      console.log("⏰ REMINDER:", reminderTime.format());
 
-      if (reminderTime <= now) {
+      if (nowTz.isAfter(reminderTime) && nowTz.isBefore(sessionDateTime)) {
         console.log("✅ ENTRA AL RECORDATORIO");
         toNotify.push(s);
       } else {
