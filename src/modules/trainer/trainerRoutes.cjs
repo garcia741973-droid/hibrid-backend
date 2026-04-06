@@ -31,7 +31,7 @@ router.get('/my-package', requireAuth, controller.getMyPackage);
 
 router.get('/clients', requireAuth, controller.getClients);
 
-router.get('/my-packages', requireAuth, trainerController.getMyPackages);
+router.get('/my-packages', requireAuth, controller.getMyPackages);
 
 // =============================
 // 🔔 RECORDATORIOS
