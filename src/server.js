@@ -3,8 +3,11 @@ const cors = require("cors");
 require("dotenv").config();
 
 const admin = require("firebase-admin");
+const serviceAccount = require("./config/firebaseServiceAccount.json");
 
-admin.initializeApp();
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
 
 const { pool } = require("./config/db");
 
