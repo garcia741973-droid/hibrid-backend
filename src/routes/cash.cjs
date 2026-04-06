@@ -316,5 +316,100 @@ router.get('/export.pdf', requireAuth, async (req, res) => {
   }
 });
 
+// =========================
+// 📥 EXPORT FULL (EXCEL PRO)
+// =========================
+router.get('/export-full.xlsx', requireAuth, async (req, res) => {
+  try {
+
+    const { from, to } = req.query;
+    const company_id = req.user.company_id;
+
+    const result = await pool.query(
+      `
+      SELECT 
+        cm.*,
+        ec.name as category_name,
+        u.name,
+        u.last_name
+      FROM cash_movements cm
+      LEFT JOIN expense_categories ec ON cm.category_id = ec.id
+      LEFT JOIN users u ON cm.staff_id = u.id
+      WHERE cm.company_id = $1
+      AND DATE(cm.created_at) BETWEEN DATE($2) AND DATE($3)
+      ORDER BY cm.created_at DESC
+      `,
+      [company_id, from, to]
+    );
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Reporte Caja');
+
+    sheet.columns = [
+      { header: 'ID', key: 'id', width: 10 },
+      { header: 'Fecha', key: 'date', width: 15 },
+      { header: 'Hora', key: 'time', width: 10 },
+      { header: 'Año', key: 'year', width: 10 },
+      { header: 'Mes', key: 'month', width: 10 },
+      { header: 'Día', key: 'day', width: 10 },
+      { header: 'Tipo', key: 'type', width: 12 },
+      { header: 'Monto', key: 'amount', width: 15 },
+      { header: 'Monto (+/-)', key: 'signed', width: 15 },
+      { header: 'Usuario', key: 'user', width: 25 },
+      { header: 'Rol', key: 'role', width: 15 },
+      { header: 'Categoría', key: 'category', width: 20 },
+      { header: 'Referencia', key: 'reference', width: 20 },
+      { header: 'Descripción', key: 'description', width: 30 },
+    ];
+
+    result.rows.forEach(m => {
+
+      const dateObj = new Date(m.created_at);
+
+      const tipo =
+        (m.type === 'income' || m.type === 'IN') ? 'Ingreso' : 'Egreso';
+
+      const signed =
+        (m.type === 'income' || m.type === 'IN')
+          ? Number(m.amount)
+          : -Number(m.amount);
+
+      sheet.addRow({
+        id: m.id,
+        date: dateObj.toISOString().split('T')[0],
+        time: dateObj.toTimeString().split(' ')[0],
+        year: dateObj.getFullYear(),
+        month: dateObj.getMonth() + 1,
+        day: dateObj.getDate(),
+        type: tipo,
+        amount: m.amount,
+        signed: signed,
+        user: `${m.name || ''} ${m.last_name || ''}`,
+        role: m.created_by_role || '',
+        category: m.category_name || '',
+        reference: m.reference_type || '',
+        description: m.description || '',
+      });
+
+    });
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename=reporte_caja_full.xlsx'
+    );
+
+    await workbook.xlsx.write(res);
+    res.end();
+
+  } catch (err) {
+    console.error('EXPORT FULL ERROR:', err);
+    res.status(500).json({ error: 'Error exportando reporte completo' });
+  }
+});
 
 module.exports = router;
