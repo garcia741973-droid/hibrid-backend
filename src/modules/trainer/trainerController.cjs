@@ -878,6 +878,48 @@ exports.getMyPackage = async (req, res) => {
 };
 
 // =============================
+// 👤 MIS PAQUETES (LISTA)
+// =============================
+exports.getMyPackages = async (req, res) => {
+  try {
+
+    if (req.user.company_type !== 'trainer') {
+      return res.status(403).json({
+        error: 'Solo trainer'
+      });
+    }
+
+    const { rows } = await pool.query(
+      `
+      SELECT 
+        tcp.id,
+        tp.name,
+        tp.price,
+        tcp.sessions_total,
+        tcp.sessions_used,
+        tcp.status,
+        tcp.created_at
+      FROM trainer_client_packages tcp
+      JOIN trainer_packages tp 
+        ON tp.id = tcp.package_id
+      WHERE tcp.client_id = $1
+        AND tcp.company_id = $2
+      ORDER BY tcp.created_at DESC
+      `,
+      [req.user.id, req.user.company_id]
+    );
+
+    res.json(rows);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      error: 'Error obteniendo paquetes'
+    });
+  }
+};
+
+// =============================
 // 🔔 RECORDATORIOS DE SESIONES
 // =============================
 exports.getSessionReminders = async (req, res) => {
