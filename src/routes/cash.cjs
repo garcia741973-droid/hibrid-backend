@@ -3,6 +3,8 @@ const router = express.Router();
 const { pool } = require('../config/db');
 const requireAuth = require('../middlewares/requireAuth.cjs');
 
+const ExcelJS = require('exceljs');
+const PDFDocument = require('pdfkit');
 
 // =========================
 // ➕ ADD EXPENSE (GASTO)
@@ -192,6 +194,125 @@ router.get('/categories', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('CATEGORIES ERROR:', err);
     res.status(500).json({ error: 'Error obteniendo categorías' });
+  }
+});
+
+// =========================
+// 📥 EXPORT EXCEL
+// =========================
+router.get('/export.xlsx', requireAuth, async (req, res) => {
+  try {
+
+    const { from, to } = req.query;
+    const company_id = req.user.company_id;
+
+    const result = await pool.query(
+      `
+      SELECT cm.*, ec.name as category_name
+      FROM cash_movements cm
+      LEFT JOIN expense_categories ec ON cm.category_id = ec.id
+      WHERE cm.company_id = $1
+      AND DATE(cm.created_at) BETWEEN DATE($2) AND DATE($3)
+      ORDER BY cm.created_at DESC
+      `,
+      [company_id, from, to]
+    );
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Caja');
+
+    sheet.columns = [
+      { header: 'Fecha', key: 'date', width: 15 },
+      { header: 'Tipo', key: 'type', width: 10 },
+      { header: 'Categoría', key: 'category', width: 20 },
+      { header: 'Descripción', key: 'description', width: 30 },
+      { header: 'Monto', key: 'amount', width: 15 },
+    ];
+
+    result.rows.forEach(m => {
+
+      const tipo =
+        (m.type === 'income' || m.type === 'IN') ? 'Ingreso' : 'Egreso';
+
+      sheet.addRow({
+        date: m.created_at,
+        type: tipo,
+        category: m.category_name || '',
+        description: m.description || '',
+        amount: m.amount
+      });
+
+    });
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename=reporte_caja.xlsx'
+    );
+
+    await workbook.xlsx.write(res);
+    res.end();
+
+  } catch (err) {
+    console.error('EXPORT EXCEL ERROR:', err);
+    res.status(500).json({ error: 'Error exportando Excel' });
+  }
+});
+
+// =========================
+// 📥 EXPORT PDF
+// =========================
+router.get('/export.pdf', requireAuth, async (req, res) => {
+  try {
+
+    const { from, to } = req.query;
+    const company_id = req.user.company_id;
+
+    const result = await pool.query(
+      `
+      SELECT cm.*, ec.name as category_name
+      FROM cash_movements cm
+      LEFT JOIN expense_categories ec ON cm.category_id = ec.id
+      WHERE cm.company_id = $1
+      AND DATE(cm.created_at) BETWEEN DATE($2) AND DATE($3)
+      ORDER BY cm.created_at DESC
+      `,
+      [company_id, from, to]
+    );
+
+    const doc = new PDFDocument();
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename=reporte_caja.pdf'
+    );
+
+    doc.pipe(res);
+
+    doc.fontSize(18).text('Reporte de Caja', { align: 'center' });
+    doc.moveDown();
+
+    result.rows.forEach(m => {
+
+      const tipo =
+        (m.type === 'income' || m.type === 'IN') ? 'Ingreso' : 'Egreso';
+
+      doc.fontSize(10).text(
+        `${m.created_at} | ${tipo} | ${m.amount} Bs`
+      );
+
+    });
+
+    doc.end();
+
+  } catch (err) {
+    console.error('EXPORT PDF ERROR:', err);
+    res.status(500).json({ error: 'Error exportando PDF' });
   }
 });
 
