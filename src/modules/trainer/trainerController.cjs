@@ -843,6 +843,13 @@ exports.getMyPackage = async (req, res) => {
 
     const pkg = rows[0];
 
+    const total = Number(pkg.total || 0);
+    const used = Number(pkg.used || 0);
+
+    if (total === 0 && used === 0) {
+      return res.json(null);
+    }
+
     const sessions_left =
       Number(pkg.total || 0) - Number(pkg.used || 0);
 
