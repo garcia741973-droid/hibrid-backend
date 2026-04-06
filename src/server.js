@@ -25,6 +25,16 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// =============================
+// 🔥 HEALTH CHECK (CRÍTICO)
+// =============================
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    time: new Date().toISOString()
+  });
+});
+
 // rutas
 app.use("/auth", authRoutes);
 app.use("/admin", adminRoutes);
