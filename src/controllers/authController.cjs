@@ -151,3 +151,68 @@ exports.getReminder = async (req, res) => {
     res.status(500).json({ error: "Error obteniendo recordatorio" });
   }
 };
+
+// =============================
+// 🔐 CAMBIAR CONTRASEÑA
+// =============================
+exports.changePassword = async (req, res) => {
+
+  console.log("🔐 CHANGE PASSWORD:", req.user.id);
+
+  try {
+
+    const { current_password, new_password } = req.body;
+
+    if (!current_password || !new_password) {
+      return res.status(400).json({
+        error: "Datos incompletos"
+      });
+    }
+
+    /// 🔹 obtener usuario actual
+    const result = await pool.query(
+      `SELECT password FROM users WHERE id = $1`,
+      [req.user.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        error: "Usuario no encontrado"
+      });
+    }
+
+    const user = result.rows[0];
+
+    /// 🔹 validar password actual
+    const valid = await bcrypt.compare(
+      current_password,
+      user.password
+    );
+
+    if (!valid) {
+      return res.status(400).json({
+        error: "Contraseña actual incorrecta"
+      });
+    }
+
+    /// 🔹 nueva password
+    const hashed = await bcrypt.hash(new_password, 10);
+
+    await pool.query(
+      `UPDATE users SET password = $1 WHERE id = $2`,
+      [hashed, req.user.id]
+    );
+
+    res.json({
+      success: true
+    });
+
+  } catch (error) {
+
+    console.error("❌ ERROR CHANGE PASSWORD:", error);
+
+    res.status(500).json({
+      error: "Error cambiando contraseña"
+    });
+  }
+};

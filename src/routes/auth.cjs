@@ -12,4 +12,7 @@ router.put("/reminder", requireAuth, authController.updateReminder);
 
 router.get("/reminder", requireAuth, authController.getReminder);
 
+// 🔐 CAMBIAR PASSWORD (🔥 NUEVO)
+router.put("/change-password", requireAuth, authController.changePassword);
+
 module.exports = router;
