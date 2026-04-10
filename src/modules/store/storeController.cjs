@@ -159,14 +159,14 @@ exports.createSale = async (req,res)=>{
           throw new Error('Stock insuficiente (concurrente)');
         }
 
-        /// 🔥 REGISTRAR SALIDA (VENTA)
+        /// 🔥 REGISTRAR SALIDA (VENTA) ✅ FIX PRO
         await client.query(
           `
           INSERT INTO stock_movements
-          (product_id, type, quantity, staff_id, company_id)
-          VALUES ($1, 'OUT', $2, $3, $4)
+          (product_id, type, quantity, cost_price, staff_id, company_id, reference_type)
+          VALUES ($1, 'IN', $2, $3, $4, $5, 'purchase')
           `,
-          [item.product_id, item.quantity, staffId, companyId]
+          [item.product_id, item.quantity, staffId, companyId, saleId]
         );
 
     }
@@ -382,8 +382,8 @@ exports.addStock = async (req, res) => {
     await client.query(
       `
       INSERT INTO stock_movements
-      (product_id, type, quantity, cost_price, staff_id, company_id)
-      VALUES ($1, 'IN', $2, $3, $4, $5)
+      (product_id, type, quantity, cost_price, staff_id, company_id, reference_type)
+      VALUES ($1, 'IN', $2, $3, $4, $5, 'purchase')
       `,
       [product_id, quantity, cost_price, staffId, companyId]
     );
