@@ -428,59 +428,6 @@ exports.activateCompanyPlan = async (req, res) => {
   }
 };
 
-exports.updateCompany = async (req, res) => {
-  try {
-
-    const { id } = req.params;
-
-    const {
-      name,
-      contact_name,
-      contact_phone,
-      contact_email,
-      city,
-      country,
-      type,
-      address
-    } = req.body;
-
-    const { rows } = await pool.query(
-      `
-      UPDATE companies
-      SET
-        name = COALESCE($1, name),
-        contact_name = COALESCE($2, contact_name),
-        contact_phone = COALESCE($3, contact_phone),
-        contact_email = COALESCE($4, contact_email),
-        city = COALESCE($5, city),
-        country = COALESCE($6, country),
-        type = COALESCE($7, type),
-        address = COALESCE($8, address)
-      WHERE id = $9
-      RETURNING *
-      `,
-      [
-        name,
-        contact_name,
-        contact_phone,
-        contact_email,
-        city,
-        country,
-        type,
-        address,
-        id
-      ]
-    );
-
-    res.json(rows[0]);
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({
-      error: "Error actualizando empresa"
-    });
-  }
-};
 
 exports.getCompanyPayments = async (req, res) => {
   try {
@@ -567,5 +514,56 @@ exports.updateCompany = async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error actualizando empresa" });
+  }
+};
+
+// =============================
+// 🔥 ACTUALIZAR PLAN
+// =============================
+exports.updatePlan = async (req, res) => {
+  try {
+
+    const { id } = req.params;
+
+    const {
+      name,
+      price,
+      duration_days,
+      max_clients,
+      max_staff,
+      features
+    } = req.body;
+
+    const { rows } = await pool.query(
+      `
+      UPDATE company_plans
+      SET
+        name = COALESCE($1, name),
+        price = COALESCE($2, price),
+        duration_days = COALESCE($3, duration_days),
+        max_clients = COALESCE($4, max_clients),
+        max_staff = COALESCE($5, max_staff),
+        features = COALESCE($6, features)
+      WHERE id = $7
+      RETURNING *
+      `,
+      [
+        name,
+        price,
+        duration_days,
+        max_clients,
+        max_staff,
+        features,
+        id
+      ]
+    );
+
+    res.json(rows[0]);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      error: "Error actualizando plan"
+    });
   }
 };

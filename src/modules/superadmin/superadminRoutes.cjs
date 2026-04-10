@@ -68,4 +68,11 @@ router.get(
   controller.getCompanyPayments
 );
 
+router.put(
+  '/plans/:id',
+  requireAuth,
+  requireRole(['superadmin']),
+  controller.updatePlan
+);
+
 module.exports = router;
