@@ -606,11 +606,33 @@ exports.exportInventoryExcel = async (req, res) => {
       { header: 'Cantidad', key: 'qty', width: 10 },
       { header: 'Costo', key: 'cost', width: 12 },
       { header: 'Precio', key: 'price', width: 12 },
+
+      /// 🔥 NUEVO
+      { header: 'Stock', key: 'stock_after', width: 10 },
+      { header: 'Costo Promedio', key: 'avg_cost', width: 15 },
+
       { header: 'Usuario', key: 'user', width: 20 },
     ];
 
     /// FILAS
+    let stock = 0;
+    let totalCost = 0;
+
     rows.forEach(r => {
+
+      if (r.type === 'IN') {
+        stock += r.quantity;
+        totalCost += r.quantity * (r.cost_price || 0);
+      }
+
+      if (r.type === 'OUT') {
+        const avg = stock > 0 ? totalCost / stock : 0;
+        stock -= r.quantity;
+        totalCost -= avg * r.quantity;
+      }
+
+      const avgCost = stock > 0 ? totalCost / stock : 0;
+
       sheet.addRow({
         date: r.created_at,
         product: r.product_name,
@@ -618,8 +640,11 @@ exports.exportInventoryExcel = async (req, res) => {
         qty: r.quantity,
         cost: r.cost_price || 0,
         price: r.price || 0,
+        stock_after: stock,
+        avg_cost: avgCost.toFixed(2),
         user: r.staff_name || '',
       });
+
     });
 
     /// RESPONSE
