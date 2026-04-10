@@ -99,7 +99,7 @@ router.post(
         });
       }
 
-      const bcrypt = require('bcrypt');
+      
       const hashedPassword = await bcrypt.hash(password, 10);
 
       const { rows } = await pool.query(
@@ -160,7 +160,7 @@ router.put(
       let hashedPassword = null;
 
       if(password){
-        const bcrypt = require('bcrypt');
+        const bcrypt = require('bcryptjs');
         hashedPassword = await bcrypt.hash(password, 10);
       }
 

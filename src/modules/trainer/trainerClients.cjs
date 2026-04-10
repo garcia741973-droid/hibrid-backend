@@ -1,6 +1,6 @@
 const { pool } = require('../../config/db');
 
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 
 // ✅ CREAR CLIENTE COMPLETO
 const createClient = async (req, res) => {
