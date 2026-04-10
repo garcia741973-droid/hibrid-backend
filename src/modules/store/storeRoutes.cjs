@@ -51,4 +51,10 @@ router.get(
   storeController.getInventoryReport
 );
 
+router.get(
+  '/inventory/export-full.xlsx',
+  requireAuth,
+  storeController.exportInventoryExcel
+);
+
 module.exports = router;

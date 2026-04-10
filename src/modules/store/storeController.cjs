@@ -563,3 +563,87 @@ exports.getInventoryReport = async (req, res) => {
 
   }
 };
+
+// desargar a excel 
+
+const ExcelJS = require('exceljs');
+
+exports.exportInventoryExcel = async (req, res) => {
+
+  try {
+
+    const { from, to } = req.query;
+    const companyId = req.user.company_id;
+
+    const { rows } = await pool.query(
+      `
+      SELECT 
+        sm.created_at,
+        p.name as product_name,
+        sm.type,
+        sm.quantity,
+        sm.cost_price,
+        p.price,
+        u.name as staff_name
+      FROM stock_movements sm
+      LEFT JOIN products p ON p.id = sm.product_id
+      LEFT JOIN users u ON u.id = sm.staff_id
+      WHERE sm.company_id = $1
+      AND sm.created_at BETWEEN $2 AND $3
+      ORDER BY sm.created_at ASC
+      `,
+      [companyId, from, to]
+    );
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Inventario');
+
+    /// HEADERS
+    sheet.columns = [
+      { header: 'Fecha', key: 'date', width: 20 },
+      { header: 'Producto', key: 'product', width: 25 },
+      { header: 'Tipo', key: 'type', width: 10 },
+      { header: 'Cantidad', key: 'qty', width: 10 },
+      { header: 'Costo', key: 'cost', width: 12 },
+      { header: 'Precio', key: 'price', width: 12 },
+      { header: 'Usuario', key: 'user', width: 20 },
+    ];
+
+    /// FILAS
+    rows.forEach(r => {
+      sheet.addRow({
+        date: r.created_at,
+        product: r.product_name,
+        type: r.type,
+        qty: r.quantity,
+        cost: r.cost_price || 0,
+        price: r.price || 0,
+        user: r.staff_name || '',
+      });
+    });
+
+    /// RESPONSE
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename=inventory_report.xlsx'
+    );
+
+    await workbook.xlsx.write(res);
+    res.end();
+
+  } catch (err) {
+
+    console.error("EXPORT INVENTORY ERROR:", err);
+
+    res.status(500).json({
+      error: "Error exportando inventario"
+    });
+
+  }
+
+};
