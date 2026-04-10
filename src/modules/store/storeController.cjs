@@ -576,46 +576,13 @@ exports.exportInventoryExcel = async (req, res) => {
     const companyId = req.user.company_id;
 
     // ============================================
-    // 🔥 1. SALDO INICIAL (ANTES DEL FROM)
-    // ============================================
-    const initialData = await pool.query(
-      `
-      SELECT 
-        sm.type,
-        sm.quantity,
-        sm.cost_price
-      FROM stock_movements sm
-      WHERE sm.company_id = $1
-      AND sm.created_at < $2
-      `,
-      [companyId, from]
-    );
-
-    let stock = 0;
-    let totalCost = 0;
-
-    initialData.rows.forEach(r => {
-
-      if (r.type === 'IN') {
-        stock += r.quantity;
-        totalCost += r.quantity * (r.cost_price || 0);
-      }
-
-      if (r.type === 'OUT') {
-        const avg = stock > 0 ? totalCost / stock : 0;
-        stock -= r.quantity;
-        totalCost -= avg * r.quantity;
-      }
-
-    });
-
-    // ============================================
-    // 🔥 2. MOVIMIENTOS DEL RANGO
+    // 🔥 TRAER MOVIMIENTOS
     // ============================================
     const { rows } = await pool.query(
       `
       SELECT 
         sm.created_at,
+        sm.product_id,
         p.name as product_name,
         sm.type,
         sm.quantity,
@@ -627,7 +594,7 @@ exports.exportInventoryExcel = async (req, res) => {
       LEFT JOIN users u ON u.id = sm.staff_id
       WHERE sm.company_id = $1
       AND sm.created_at BETWEEN $2 AND $3
-      ORDER BY sm.created_at ASC
+      ORDER BY p.name ASC, sm.created_at ASC
       `,
       [companyId, from, to]
     );
@@ -651,53 +618,110 @@ exports.exportInventoryExcel = async (req, res) => {
     ];
 
     // ============================================
-    // 🔥 FILA SALDO INICIAL
+    // 🔥 AGRUPAR POR PRODUCTO
     // ============================================
-    const initialAvg = stock > 0 ? totalCost / stock : 0;
+    const grouped = {};
 
-    sheet.addRow({
-      date: '',
-      product: 'SALDO INICIAL',
-      type: '',
-      qty: '',
-      cost: '',
-      price: '',
-      stock_after: stock,
-      avg_cost: initialAvg.toFixed(2),
-      user: '',
+    rows.forEach(r => {
+      if (!grouped[r.product_id]) {
+        grouped[r.product_id] = {
+          name: r.product_name,
+          movements: []
+        };
+      }
+      grouped[r.product_id].movements.push(r);
     });
 
     // ============================================
-    // 🔥 PROCESAR MOVIMIENTOS
+    // 🔥 PROCESAR CADA PRODUCTO
     // ============================================
-    rows.forEach(r => {
+    for (const productId in grouped) {
 
-      if (r.type === 'IN') {
-        stock += r.quantity;
-        totalCost += r.quantity * (r.cost_price || 0);
-      }
+      const product = grouped[productId];
 
-      if (r.type === 'OUT') {
-        const avg = stock > 0 ? totalCost / stock : 0;
-        stock -= r.quantity;
-        totalCost -= avg * r.quantity;
-      }
+      let stock = 0;
+      let totalCost = 0;
 
-      const avgCost = stock > 0 ? totalCost / stock : 0;
+      // ============================================
+      // 🔥 SALDO INICIAL POR PRODUCTO
+      // ============================================
+      const initialData = await pool.query(
+        `
+        SELECT type, quantity, cost_price
+        FROM stock_movements
+        WHERE company_id = $1
+        AND product_id = $2
+        AND created_at < $3
+        `,
+        [companyId, productId, from]
+      );
 
-      sheet.addRow({
-        date: r.created_at,
-        product: r.product_name,
-        type: r.type,
-        qty: r.quantity,
-        cost: r.cost_price || 0,
-        price: r.price || 0,
-        stock_after: stock,
-        avg_cost: avgCost.toFixed(2),
-        user: r.staff_name || '',
+      initialData.rows.forEach(r => {
+
+        if (r.type === 'IN') {
+          stock += r.quantity;
+          totalCost += r.quantity * (r.cost_price || 0);
+        }
+
+        if (r.type === 'OUT') {
+          const avg = stock > 0 ? totalCost / stock : 0;
+          stock -= r.quantity;
+          totalCost -= avg * r.quantity;
+        }
+
       });
 
-    });
+      const initialAvg = stock > 0 ? totalCost / stock : 0;
+
+      // 🔥 FILA SALDO INICIAL
+      sheet.addRow({
+        date: '',
+        product: `SALDO INICIAL - ${product.name}`,
+        type: '',
+        qty: '',
+        cost: '',
+        price: '',
+        stock_after: stock,
+        avg_cost: initialAvg.toFixed(2),
+        user: '',
+      });
+
+      // ============================================
+      // 🔥 MOVIMIENTOS DEL PRODUCTO
+      // ============================================
+      product.movements.forEach(r => {
+
+        if (r.type === 'IN') {
+          stock += r.quantity;
+          totalCost += r.quantity * (r.cost_price || 0);
+        }
+
+        if (r.type === 'OUT') {
+          const avg = stock > 0 ? totalCost / stock : 0;
+          stock -= r.quantity;
+          totalCost -= avg * r.quantity;
+        }
+
+        const avgCost = stock > 0 ? totalCost / stock : 0;
+
+        sheet.addRow({
+          date: r.created_at,
+          product: product.name,
+          type: r.type,
+          qty: r.quantity,
+          cost: r.cost_price || 0,
+          price: r.price || 0,
+          stock_after: stock,
+          avg_cost: avgCost.toFixed(2),
+          user: r.staff_name || '',
+        });
+
+      });
+
+      // 🔥 ESPACIO ENTRE PRODUCTOS
+      sheet.addRow({});
+
+    }
 
     // ============================================
     // 🔥 RESPONSE
