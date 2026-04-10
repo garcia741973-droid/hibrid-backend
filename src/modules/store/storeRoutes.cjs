@@ -45,4 +45,10 @@ router.get(
   storeController.getProductHistory
 );
 
+router.get(
+  '/inventory/report',
+  requireAuth,
+  storeController.getInventoryReport
+);
+
 module.exports = router;

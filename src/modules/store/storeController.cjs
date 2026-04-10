@@ -159,14 +159,21 @@ exports.createSale = async (req,res)=>{
           throw new Error('Stock insuficiente (concurrente)');
         }
 
-        /// 🔥 REGISTRAR SALIDA (VENTA) ✅ FIX PRO
+        /// 🔥 REGISTRAR SALIDA (VENTA) ✅ CON COSTO
         await client.query(
           `
           INSERT INTO stock_movements
-          (product_id, type, quantity, cost_price, staff_id, company_id, reference_type)
-          VALUES ($1, 'IN', $2, $3, $4, $5, 'purchase')
+          (product_id, type, quantity, cost_price, staff_id, company_id, reference_type, reference_id)
+          VALUES ($1, 'OUT', $2, $3, $4, $5, 'sale', $6)
           `,
-          [item.product_id, item.quantity, staffId, companyId, saleId]
+          [
+            item.product_id,
+            item.quantity,
+            item.unit_price, // 🔥 CLAVE (o cost_price si quieres exactitud contable)
+            staffId,
+            companyId,
+            saleId
+          ]
         );
 
     }
@@ -480,4 +487,79 @@ exports.getProductHistory = async (req, res) => {
 
   }
 
+};
+
+// ===============================
+// 📊 INVENTORY REPORT
+// ===============================
+exports.getInventoryReport = async (req, res) => {
+
+  try {
+
+    const companyId = req.user.company_id;
+    const { from, to } = req.query;
+
+    const { rows } = await pool.query(
+      `
+      SELECT 
+        sm.type,
+        sm.quantity,
+        sm.cost_price,
+        sm.reference_type,
+        sm.created_at,
+        p.name as product_name,
+        u.name as staff_name
+      FROM stock_movements sm
+      LEFT JOIN products p ON p.id = sm.product_id
+      LEFT JOIN users u ON u.id = sm.staff_id
+      WHERE sm.company_id = $1
+      AND sm.created_at BETWEEN $2 AND $3
+      ORDER BY sm.created_at DESC
+      `,
+      [companyId, from, to]
+    );
+
+    let total_in_qty = 0;
+    let total_out_qty = 0;
+    let total_in_bs = 0;
+    let total_out_bs = 0;
+
+    const movements = rows.map(r => {
+
+      const total = (r.quantity || 0) * (r.cost_price || 0);
+
+      if (r.type === 'IN') {
+        total_in_qty += r.quantity;
+        total_in_bs += total;
+      }
+
+      if (r.type === 'OUT') {
+        total_out_qty += r.quantity;
+        total_out_bs += total;
+      }
+
+      return {
+        ...r,
+        total
+      };
+
+    });
+
+    res.json({
+      total_in_qty,
+      total_out_qty,
+      total_in_bs,
+      total_out_bs,
+      movements
+    });
+
+  } catch (err) {
+
+    console.error("INVENTORY REPORT ERROR:", err);
+
+    res.status(500).json({
+      error: "Error generando reporte inventario"
+    });
+
+  }
 };
