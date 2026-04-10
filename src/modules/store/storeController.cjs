@@ -567,7 +567,6 @@ exports.getInventoryReport = async (req, res) => {
 // desargar a excel 
 
 const ExcelJS = require('exceljs');
-const { pool } = require('../../config/db');
 
 exports.exportInventoryExcel = async (req, res) => {
 
