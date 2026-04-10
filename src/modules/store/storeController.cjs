@@ -567,6 +567,7 @@ exports.getInventoryReport = async (req, res) => {
 // desargar a excel 
 
 const ExcelJS = require('exceljs');
+const { pool } = require('../../config/db');
 
 exports.exportInventoryExcel = async (req, res) => {
 
@@ -575,6 +576,43 @@ exports.exportInventoryExcel = async (req, res) => {
     const { from, to } = req.query;
     const companyId = req.user.company_id;
 
+    // ============================================
+    // 🔥 1. SALDO INICIAL (ANTES DEL FROM)
+    // ============================================
+    const initialData = await pool.query(
+      `
+      SELECT 
+        sm.type,
+        sm.quantity,
+        sm.cost_price
+      FROM stock_movements sm
+      WHERE sm.company_id = $1
+      AND sm.created_at < $2
+      `,
+      [companyId, from]
+    );
+
+    let stock = 0;
+    let totalCost = 0;
+
+    initialData.rows.forEach(r => {
+
+      if (r.type === 'IN') {
+        stock += r.quantity;
+        totalCost += r.quantity * (r.cost_price || 0);
+      }
+
+      if (r.type === 'OUT') {
+        const avg = stock > 0 ? totalCost / stock : 0;
+        stock -= r.quantity;
+        totalCost -= avg * r.quantity;
+      }
+
+    });
+
+    // ============================================
+    // 🔥 2. MOVIMIENTOS DEL RANGO
+    // ============================================
     const { rows } = await pool.query(
       `
       SELECT 
@@ -598,7 +636,9 @@ exports.exportInventoryExcel = async (req, res) => {
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Inventario');
 
-    /// HEADERS
+    // ============================================
+    // 🔥 HEADERS
+    // ============================================
     sheet.columns = [
       { header: 'Fecha', key: 'date', width: 20 },
       { header: 'Producto', key: 'product', width: 25 },
@@ -606,18 +646,31 @@ exports.exportInventoryExcel = async (req, res) => {
       { header: 'Cantidad', key: 'qty', width: 10 },
       { header: 'Costo', key: 'cost', width: 12 },
       { header: 'Precio', key: 'price', width: 12 },
-
-      /// 🔥 NUEVO
       { header: 'Stock', key: 'stock_after', width: 10 },
       { header: 'Costo Promedio', key: 'avg_cost', width: 15 },
-
       { header: 'Usuario', key: 'user', width: 20 },
     ];
 
-    /// FILAS
-    let stock = 0;
-    let totalCost = 0;
+    // ============================================
+    // 🔥 FILA SALDO INICIAL
+    // ============================================
+    const initialAvg = stock > 0 ? totalCost / stock : 0;
 
+    sheet.addRow({
+      date: '',
+      product: 'SALDO INICIAL',
+      type: '',
+      qty: '',
+      cost: '',
+      price: '',
+      stock_after: stock,
+      avg_cost: initialAvg.toFixed(2),
+      user: '',
+    });
+
+    // ============================================
+    // 🔥 PROCESAR MOVIMIENTOS
+    // ============================================
     rows.forEach(r => {
 
       if (r.type === 'IN') {
@@ -647,7 +700,9 @@ exports.exportInventoryExcel = async (req, res) => {
 
     });
 
-    /// RESPONSE
+    // ============================================
+    // 🔥 RESPONSE
+    // ============================================
     res.setHeader(
       'Content-Type',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
