@@ -318,7 +318,10 @@ exports.getCompanyStatus = async (req, res) => {
 
     // 🔥 CALCULAR SUSCRIPCIÓN AQUÍ (CLAVE)
     const today = new Date();
+    today.setHours(0,0,0,0);
+
     const expiration = new Date(rows[0].expiration_date);
+    expiration.setHours(0,0,0,0);
 
     const diffDays = Math.ceil(
       (expiration - today) / (1000 * 60 * 60 * 24)

@@ -69,7 +69,10 @@ module.exports = async (req, res, next) => {
 
       if (company.expiration_date) {
         const today = new Date();
+        today.setHours(0,0,0,0);
+
         const expiration = new Date(company.expiration_date);
+        expiration.setHours(0,0,0,0);
 
         if (expiration < today) {
           return res.status(403).json({
