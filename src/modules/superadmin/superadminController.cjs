@@ -329,7 +329,10 @@ exports.getCompanyStatus = async (req, res) => {
       expired: diffDays < 0
     };
 
-    return res.json(rows[0]);
+    return res.json({
+      ...rows[0],
+      subscription
+    });
 
   } catch (err) {
     console.error("❌ ERROR COMPANY STATUS:", err);
