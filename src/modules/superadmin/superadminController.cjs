@@ -17,6 +17,7 @@ exports.createCompany = async (req, res) => {
       contact_email,
       city,
       country,
+      address,
       logo_url,
       timezone // 🔥 NUEVO
     } = req.body;
@@ -69,10 +70,11 @@ exports.createCompany = async (req, res) => {
         contact_email,
         city,
         country,
+        address,
         logo_url,
         timezone
       )
-      VALUES ($1,$2,$3,'active',$4,$5,$6,$7,$8,$9,$10,$11)
+      VALUES ($1,$2,$3,'active',$4,$5,$6,$7,$8,$9,$10,$11,$12)
       RETURNING *
       `,
       [
@@ -85,6 +87,7 @@ exports.createCompany = async (req, res) => {
         contact_email || '',
         city || '',
         country || '',
+        address || '',
         logo_url || null,
         timezone || 'America/La_Paz' // 🔥 NUEVO
       ]
