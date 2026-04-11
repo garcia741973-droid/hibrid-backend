@@ -10,10 +10,16 @@ exports.createPlan = async (req,res)=>{
 
     const {rows} = await pool.query(
       `INSERT INTO plans
-      (name,duration_days,price,description)
-      VALUES ($1,$2,$3,$4)
+      (name,duration_days,price,description,company_id)
+      VALUES ($1,$2,$3,$4,$5)
       RETURNING *`,
-      [name,duration_days,price,description]
+      [
+        name,
+        duration_days,
+        price,
+        description,
+        req.user.company_id // 🔥 CLAVE
+      ]
     );
 
     res.json(rows[0]);
@@ -45,7 +51,9 @@ exports.getPlans = async (req,res)=>{
         description
       FROM plans
       WHERE is_active = true
-      ORDER BY duration_days ASC`
+      AND company_id = $1
+      ORDER BY duration_days ASC`,
+      [req.user.company_id]
     );
 
     res.json(rows);
@@ -62,6 +70,7 @@ exports.getPlans = async (req,res)=>{
 
 };
 
+
 // =============================
 // OBTENER TODOS LOS PLANES (ADMIN)
 // =============================
@@ -70,7 +79,10 @@ exports.getAllPlans = async (req,res)=>{
   try{
 
     const {rows} = await pool.query(
-      `SELECT * FROM plans ORDER BY id DESC`
+      `SELECT * FROM plans
+      WHERE company_id = $1
+      ORDER BY id DESC`,
+      [req.user.company_id]
     );
 
     res.json(rows);
@@ -101,10 +113,10 @@ exports.togglePlan = async (req,res)=>{
       `
       UPDATE plans
       SET is_active = NOT is_active
-      WHERE id=$1
+      WHERE id=$1 AND company_id=$2
       RETURNING *
       `,
-      [id]
+      [id, req.user.company_id]
     );
 
     res.json(rows[0]);
@@ -121,63 +133,6 @@ exports.togglePlan = async (req,res)=>{
 
 };
 
-// =============================
-// ADMIN - TODOS LOS PLANES
-// =============================
-exports.getAllPlans = async (req,res)=>{
-
-  try{
-
-    const {rows} = await pool.query(
-      `SELECT * FROM plans ORDER BY id DESC`
-    );
-
-    res.json(rows);
-
-  }catch(err){
-
-    console.error(err);
-
-    res.status(500).json({
-      error:"Error obteniendo planes"
-    });
-
-  }
-
-};
-
-// =============================
-// ACTIVAR / DESACTIVAR
-// =============================
-exports.togglePlan = async (req,res)=>{
-
-  try{
-
-    const {id} = req.params;
-
-    const {rows} = await pool.query(
-      `
-      UPDATE plans
-      SET is_active = NOT is_active
-      WHERE id=$1
-      RETURNING *
-      `,
-      [id]
-    );
-
-    res.json(rows[0]);
-
-  }catch(err){
-
-    console.error(err);
-
-    res.status(500).json({
-      error:"Error actualizando plan"
-    });
-
-  }
-
-};
 
 // =============================
 // EDITAR PLAN
@@ -196,10 +151,17 @@ exports.updatePlan = async (req,res)=>{
           duration_days=$2,
           price=$3,
           description=$4
-      WHERE id=$5
+      WHERE id=$5 AND company_id=$6
       RETURNING *
       `,
-      [name,duration_days,price,description,id]
+      [
+        name,
+        duration_days,
+        price,
+        description,
+        id,
+        req.user.company_id
+      ]
     );
 
     res.json(rows[0]);
