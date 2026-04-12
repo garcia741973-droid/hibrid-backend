@@ -412,4 +412,34 @@ router.get('/export-full.xlsx', requireAuth, async (req, res) => {
   }
 });
 
+// =========================
+// 💰 SALDO REAL CAJA
+// =========================
+router.get('/balance', requireAuth, async (req, res) => {
+  try {
+
+    const company_id = req.user.company_id;
+
+    const result = await pool.query(
+      `
+      SELECT 
+        COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END),0) -
+        COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END),0)
+        AS balance
+      FROM cash_movements
+      WHERE company_id = $1
+      `,
+      [company_id]
+    );
+
+    res.json({
+      balance: Number(result.rows[0].balance) || 0
+    });
+
+  } catch (err) {
+    console.error('BALANCE ERROR:', err);
+    res.status(500).json({ error: 'Error obteniendo saldo' });
+  }
+});
+
 module.exports = router;
