@@ -2,6 +2,8 @@ const { pool } = require("../config/db");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
+const admin = require("firebase-admin");
+
 exports.register = async (req, res) => {
 
  try {
@@ -74,8 +76,19 @@ exports.login = async (req,res)=>{
   { expiresIn: "7d" }
   );
 
+  // 🔥 GENERAR TOKEN FIREBASE
+  const firebaseToken = await admin.auth().createCustomToken(
+    user.id.toString(),
+    {
+      user_id: user.id.toString(),
+      company_id: user.company_id.toString(),
+      role: user.role
+    }
+  );
+
   res.json({
     token,
+    firebase_token: firebaseToken, // 🔥 NUEVO
     user:{
       id:user.id,
       name:user.name,
