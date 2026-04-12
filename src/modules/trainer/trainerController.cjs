@@ -765,6 +765,7 @@ exports.getClients = async (req, res) => {
         emergency_contact_phone
       FROM users
       WHERE company_id = $1
+        AND role = 'client'
       ORDER BY id DESC
       `,
       [req.user.company_id]
