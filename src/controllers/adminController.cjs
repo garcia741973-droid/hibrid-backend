@@ -239,3 +239,37 @@ exports.getStaff = async (req, res) => {
   }
 
 };
+
+/// 🔥 LISTAR TODOS LOS USUARIOS (CLIENT + STAFF + ADMIN)
+exports.getAllUsers = async (req, res) => {
+
+  try {
+
+    const result = await pool.query(
+      `
+      SELECT
+        id,
+        name,
+        last_name,
+        role,
+        company_id
+      FROM users
+      WHERE company_id = $1
+      ORDER BY id
+      `,
+      [req.user.company_id]
+    );
+
+    res.json(result.rows);
+
+  } catch (error) {
+
+    console.error(error);
+
+    res.status(500).json({
+      error: "Error obteniendo usuarios"
+    });
+
+  }
+
+};
