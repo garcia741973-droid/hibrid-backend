@@ -80,10 +80,9 @@ exports.login = async (req,res)=>{
 
   // 🔥 GENERAR TOKEN FIREBASE
   const firebaseToken = await admin.auth().createCustomToken(
-    `user_${user.id}`
+    user.id.toString()
   );
 
-  console.log("🔥 GENERANDO FIREBASE TOKEN PARA:", `user_${user.id}`);
   console.log("🔥 FIREBASE TOKEN:", firebaseToken);
 
   res.json({

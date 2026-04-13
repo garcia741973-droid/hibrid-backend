@@ -4,17 +4,16 @@ require("dotenv").config();
 
 const admin = require("firebase-admin");
 
-const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-
-// 🔥 FIX CRÍTICO (ESTO TE FALTA)
-serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
-
 admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
+  credential: admin.credential.cert({
+    projectId: process.env.FIREBASE_PROJECT_ID,
+    clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+    privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+  }),
 });
 
-  console.log("🔥 FIREBASE PROJECT:", process.env.FIREBASE_PROJECT_ID);
-  console.log("🔥 FIREBASE CLIENT:", process.env.FIREBASE_CLIENT_EMAIL);
+console.log("🔥 FIREBASE PROJECT:", process.env.FIREBASE_PROJECT_ID);
+console.log("🔥 FIREBASE CLIENT:", process.env.FIREBASE_CLIENT_EMAIL);
 
 const { pool } = require("./config/db");
 
