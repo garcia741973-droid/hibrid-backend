@@ -317,6 +317,4 @@ router.delete(
   }
 );
 
-router.get("/users", requireAuth, getAllUsers);
-
 module.exports = router;
