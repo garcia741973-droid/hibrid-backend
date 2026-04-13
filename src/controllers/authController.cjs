@@ -82,9 +82,9 @@ exports.login = async (req,res)=>{
   const firebaseToken = await admin.auth().createCustomToken(
     `user_${user.id}`,
     {
-      user_id: user.id.toString(),
-      company_id: user.company_id.toString(),
-      role: user.role
+      userId: user.id.toString(),
+      companyId: user.company_id.toString(),
+      userRole: user.role
     }
   );
 
