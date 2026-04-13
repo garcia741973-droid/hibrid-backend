@@ -55,6 +55,43 @@ router.get(
 );
 
 // =============================
+// 🔥 SUPPORT (CHAT)
+// =============================
+router.get(
+  "/support",
+  requireAuth, // 🔥 SOLO autenticado (cliente incluido)
+  async (req, res) => {
+
+    try {
+
+      const { rows } = await pool.query(
+        `
+        SELECT id, name, role
+        FROM users
+        WHERE role IN ('admin','staff')
+        AND company_id = $1
+        AND is_active = true
+        ORDER BY role DESC
+        `,
+        [req.user.company_id]
+      );
+
+      res.json(rows);
+
+    } catch (err) {
+
+      console.error(err);
+
+      res.status(500).json({
+        error: "Error obteniendo soporte"
+      });
+
+    }
+
+  }
+);
+
+// =============================
 // 🔥 STAFF
 // =============================
 

@@ -204,3 +204,38 @@ exports.updateClient = async (req,res) => {
   }
 
 };
+
+/// LISTAR STAFF
+exports.getStaff = async (req, res) => {
+
+  try {
+
+    const result = await pool.query(
+      `
+      SELECT
+        id,
+        name,
+        last_name,
+        email,
+        phone
+      FROM users
+      WHERE role='staff'
+      AND company_id = $1
+      ORDER BY id DESC
+      `,
+      [req.user.company_id] // 🔥 MULTI-EMPRESA
+    );
+
+    res.json(result.rows);
+
+  } catch (error) {
+
+    console.error(error);
+
+    res.status(500).json({
+      error: "Error obteniendo staff"
+    });
+
+  }
+
+};
