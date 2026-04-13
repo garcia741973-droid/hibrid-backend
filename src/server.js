@@ -6,9 +6,12 @@ const admin = require("firebase-admin");
 
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-  });
+// 🔥 FIX CRÍTICO (ESTO TE FALTA)
+serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
 
   console.log("🔥 FIREBASE PROJECT:", process.env.FIREBASE_PROJECT_ID);
   console.log("🔥 FIREBASE CLIENT:", process.env.FIREBASE_CLIENT_EMAIL);
