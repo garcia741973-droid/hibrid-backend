@@ -4,7 +4,6 @@ const router = express.Router();
 const authController = require("../controllers/authController.cjs");
 const requireAuth = require("../middlewares/requireAuth.cjs");
 
-router.post("/register", authController.register);
 router.post("/login", authController.login);
 
 // 🔔 RECORDATORIO
