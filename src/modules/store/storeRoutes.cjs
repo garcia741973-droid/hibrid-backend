@@ -18,6 +18,13 @@ router.post('/products', requireAuth, requireAdmin, storeController.createProduc
 
 router.put('/products/:id', requireAuth, requireAdmin, storeController.updateProduct);
 
+router.delete(
+  '/products/:id',
+  requireAuth,
+  requireAdmin,
+  storeController.deleteProduct
+);
+
 /// VENTAS
 
 router.post(

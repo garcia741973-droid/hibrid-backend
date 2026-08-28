@@ -904,6 +904,76 @@ exports.updateProduct = async (req, res) => {
 
 };
 
+exports.deleteProduct = async (req, res) => {
+
+  try {
+
+    const productId = Number.parseInt(
+      req.params.id,
+      10
+    );
+
+    const companyId =
+      req.user.company_id;
+
+    // =============================
+    // VALIDAR ID
+    // =============================
+    if (
+      !Number.isInteger(productId) ||
+      productId <= 0
+    ) {
+      return res.status(400).json({
+        error: "Producto inválido"
+      });
+    }
+
+    // =============================
+    // SOFT DELETE
+    // =============================
+    const { rows } = await pool.query(
+      `
+      UPDATE products
+      SET is_active = false
+      WHERE id = $1
+        AND company_id = $2
+        AND is_active = true
+      RETURNING
+        id,
+        name,
+        stock
+      `,
+      [
+        productId,
+        companyId
+      ]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({
+        error: "Producto no encontrado"
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: "Producto eliminado",
+      product: rows[0]
+    });
+
+  } catch (err) {
+
+    console.error(
+      "❌ ERROR ELIMINANDO PRODUCTO:",
+      err
+    );
+
+    return res.status(500).json({
+      error: "Error eliminando producto"
+    });
+  }
+};
+
 exports.addStock = async (req, res) => {
 
   const client = await pool.connect();
