@@ -35,7 +35,11 @@ exports.getProducts = async (req, res) => {
 // crear producto
 exports.createProduct = async (req, res) => {
 
+  const client = await pool.connect();
+
   try {
+
+    await client.query('BEGIN');
 
     const {
       name,
@@ -47,31 +51,143 @@ exports.createProduct = async (req, res) => {
     } = req.body;
 
     const companyId = req.user.company_id;
+    const staffId = req.user.id;
 
-    const { rows } = await pool.query(
-      `
-      INSERT INTO products
-      (name,description,cost_price,price,stock,image_url,company_id)
-      VALUES ($1,$2,$3,$4,$5,$6,$7)
-      RETURNING *
-      `,
-      [name, description || '', cost_price, price, stock, image_url, companyId]
+    // =============================
+    // 1️⃣ VALIDAR DATOS
+    // =============================
+
+    if (!name || !name.toString().trim()) {
+      throw new Error(
+        "Nombre del producto obligatorio"
+      );
+    }
+
+    const costPrice = Number(cost_price);
+    const salePrice = Number(price);
+    const initialStock = Number.parseInt(
+      stock ?? 0,
+      10
     );
 
-    res.json(rows[0]);
+    if (
+      !Number.isFinite(costPrice) ||
+      costPrice < 0
+    ) {
+      throw new Error(
+        "Costo inválido"
+      );
+    }
 
-  } 
-  
-  catch (err) {
+    if (
+      !Number.isFinite(salePrice) ||
+      salePrice < 0
+    ) {
+      throw new Error(
+        "Precio inválido"
+      );
+    }
 
-  console.error("🔥 CREATE PRODUCT ERROR REAL:", err);
+    if (
+      !Number.isInteger(initialStock) ||
+      initialStock < 0
+    ) {
+      throw new Error(
+        "Stock inicial inválido"
+      );
+    }
 
-  res.status(500).json({
-    error: 'Error creando producto',
-    details: err.message
-  });
+    // =============================
+    // 2️⃣ CREAR PRODUCTO
+    // =============================
+    const productResult = await client.query(
+      `
+      INSERT INTO products
+      (
+        name,
+        description,
+        cost_price,
+        price,
+        stock,
+        image_url,
+        company_id
+      )
+      VALUES
+      ($1,$2,$3,$4,$5,$6,$7)
+      RETURNING *
+      `,
+      [
+        name.toString().trim(),
+        description || '',
+        costPrice,
+        salePrice,
+        initialStock,
+        image_url || null,
+        companyId
+      ]
+    );
 
-}
+    const product = productResult.rows[0];
+
+    // =============================
+    // 3️⃣ REGISTRAR STOCK INICIAL
+    // =============================
+    if (initialStock > 0) {
+
+      await client.query(
+        `
+        INSERT INTO stock_movements
+        (
+          product_id,
+          type,
+          quantity,
+          cost_price,
+          staff_id,
+          company_id,
+          reference_type,
+          reference_id
+        )
+        VALUES
+        ($1,'IN',$2,$3,$4,$5,'initial_stock',$1)
+        `,
+        [
+          product.id,
+          initialStock,
+          costPrice,
+          staffId,
+          companyId
+        ]
+      );
+    }
+
+    // IMPORTANTE:
+    // stock inicial NO genera cash_movements.
+    // Es inventario existente al empezar a usar HIBRID.
+
+    await client.query('COMMIT');
+
+    return res.json(product);
+
+  } catch (err) {
+
+    try {
+      await client.query('ROLLBACK');
+    } catch (_) {}
+
+    console.error(
+      "❌ ERROR CREANDO PRODUCTO:",
+      err
+    );
+
+    return res.status(400).json({
+      error: err.message
+    });
+
+  } finally {
+
+    client.release();
+
+  }
 };
 
 exports.createSale = async (req, res) => {
