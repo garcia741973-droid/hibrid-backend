@@ -114,6 +114,7 @@ exports.getClients = async (req, res) => {
         FROM users
         WHERE role='client'
         AND company_id = $1
+        AND is_active = true
         ORDER BY id DESC
         `,
         [req.user.company_id] // 🔥 CLAVE

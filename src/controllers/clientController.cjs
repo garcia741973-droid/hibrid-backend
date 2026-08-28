@@ -351,9 +351,10 @@ exports.getClients = async (req, res) => {
         membership_start,
         membership_end
       FROM users
-       WHERE role = 'client'
-       AND company_id = $1
-       ORDER BY name`,
+      WHERE role = 'client'
+      AND company_id = $1
+      AND is_active = true
+      ORDER BY name`,
       [companyId]
     );
 

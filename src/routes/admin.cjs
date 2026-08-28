@@ -28,6 +28,75 @@ router.put(
  adminController.updateClient
 );
 
+// =============================
+// 🗑️ ELIMINAR CLIENTE
+// SOFT DELETE
+// =============================
+
+router.delete(
+  "/delete-client/:id",
+  requireAuth,
+  requireRole(["admin", "superadmin"]),
+  async (req, res) => {
+
+    try {
+
+      const clientId = Number.parseInt(
+        req.params.id,
+        10
+      );
+
+      if (
+        !Number.isInteger(clientId) ||
+        clientId <= 0
+      ) {
+        return res.status(400).json({
+          error: "Cliente inválido"
+        });
+      }
+
+      const { rows } = await pool.query(
+        `
+        UPDATE users
+        SET is_active = false
+        WHERE id = $1
+          AND company_id = $2
+          AND role = 'client'
+          AND is_active = true
+        RETURNING id, name, last_name
+        `,
+        [
+          clientId,
+          req.user.company_id
+        ]
+      );
+
+      if (rows.length === 0) {
+        return res.status(404).json({
+          error: "Cliente no encontrado"
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: "Cliente eliminado",
+        client: rows[0]
+      });
+
+    } catch (error) {
+
+      console.error(
+        "ERROR ELIMINANDO CLIENTE:",
+        error
+      );
+
+      return res.status(500).json({
+        error: "Error eliminando cliente"
+      });
+    }
+  }
+);
+
 router.get(
   "/admins",
   requireAuth,
