@@ -303,37 +303,91 @@ exports.validateQr = async (req, res) => {
       });
     }
 
+    // =============================
+    // 1️⃣ VALIDAR FIRMA Y EXPIRACIÓN QR
+    // =============================
     let decoded;
 
     try {
-      decoded = jwt.verify(qrCode, process.env.JWT_SECRET);
-    } catch (err) {
+
+      decoded = jwt.verify(
+        qrCode,
+        process.env.JWT_SECRET
+      );
+
+    } catch (_) {
+
       return res.status(401).json({
         error: "QR inválido o expirado"
       });
     }
 
-    const userId = decoded.user_id;
-    const qrCompanyId = decoded.company_id;
-    const companyId = req.user.company_id;
+    const userId = Number(decoded.user_id);
+    const qrCompanyId = Number(decoded.company_id);
+    const companyId = Number(req.user.company_id);
 
-    // 🔥 VALIDAR QUE EL QR SEA DE LA MISMA EMPRESA
-    if(qrCompanyId !== companyId){
+    if (
+      !Number.isInteger(userId) ||
+      userId <= 0
+    ) {
+      return res.status(401).json({
+        error: "QR inválido"
+      });
+    }
+
+    // =============================
+    // 2️⃣ MISMA EMPRESA
+    // =============================
+    if (qrCompanyId !== companyId) {
+
       return res.status(403).json({
         error: "QR no pertenece a esta empresa"
       });
     }
 
+    // =============================
+    // 3️⃣ BUSCAR CLIENTE
+    // PostgreSQL compara las fechas.
+    // Evitamos problemas de timezone JS.
+    // =============================
     const result = await pool.query(
       `
-      SELECT name, last_name, photo_url, membership_end
+      SELECT
+        name,
+        last_name,
+        photo_url,
+        membership_start,
+        membership_end,
+        membership_status,
+        is_active,
+
+        CASE
+          WHEN membership_start IS NOT NULL
+           AND membership_start > CURRENT_DATE
+          THEN true
+          ELSE false
+        END AS membership_not_started,
+
+        CASE
+          WHEN membership_end IS NOT NULL
+           AND membership_end < CURRENT_DATE
+          THEN true
+          ELSE false
+        END AS membership_expired
+
       FROM users
-      WHERE id = $1 AND company_id = $2
+
+      WHERE id = $1
+        AND company_id = $2
       `,
-      [userId, companyId]
+      [
+        userId,
+        companyId
+      ]
     );
 
     if (result.rows.length === 0) {
+
       return res.status(404).json({
         error: "Usuario no encontrado"
       });
@@ -341,47 +395,89 @@ exports.validateQr = async (req, res) => {
 
     const user = result.rows[0];
 
-    const now = new Date();
-    const end = user.membership_end ? new Date(user.membership_end) : null;
+    const clientData = {
+      name: `${user.name} ${user.last_name ?? ''}`.trim(),
+      photo: user.photo_url,
+      membership_start: user.membership_start,
+      membership_end: user.membership_end
+    };
 
-    if (!end) {
+    // =============================
+    // 4️⃣ USUARIO DESACTIVADO
+    // =============================
+    if (!user.is_active) {
+
+      return res.status(403).json({
+        error: "Cliente desactivado",
+        client: clientData
+      });
+    }
+
+    // =============================
+    // 5️⃣ SIN MEMBRESÍA
+    // =============================
+    if (
+      !user.membership_start ||
+      !user.membership_end
+    ) {
+
       return res.status(403).json({
         error: "Cliente sin membresía activa",
-        client: {
-          name: `${user.name} ${user.last_name}`,
-          photo: user.photo_url
-        }
+        client: clientData
       });
     }
 
-    if (end < now) {
+    // =============================
+    // 6️⃣ MEMBRESÍA TODAVÍA NO INICIÓ
+    // =============================
+    if (user.membership_not_started) {
+
+      return res.status(403).json({
+        error: "La membresía todavía no ha iniciado",
+        client: clientData
+      });
+    }
+
+    // =============================
+    // 7️⃣ MEMBRESÍA VENCIDA
+    // =============================
+    if (user.membership_expired) {
+
       return res.status(403).json({
         error: "Membresía vencida",
-        client: {
-          name: `${user.name} ${user.last_name}`,
-          photo: user.photo_url,
-          membership_end: user.membership_end
-        }
+        client: clientData
       });
     }
 
-    res.json({
+    // =============================
+    // 8️⃣ ESTADO DE MEMBRESÍA
+    // =============================
+    if (user.membership_status !== 'active') {
+
+      return res.status(403).json({
+        error: "Membresía no activa",
+        client: clientData
+      });
+    }
+
+    // =============================
+    // 9️⃣ ACCESO CORRECTO
+    // =============================
+    return res.json({
       message: "Acceso permitido",
-      client: {
-        name: `${user.name} ${user.last_name}`,
-        photo: user.photo_url,
-        membership_end: user.membership_end
-      }
+      client: clientData
     });
 
   } catch (err) {
 
-    console.error(err);
+    console.error(
+      "❌ ERROR VALIDANDO QR:",
+      err
+    );
 
-    res.status(500).json({
+    return res.status(500).json({
       error: "Error validando QR"
     });
-
   }
 
 };
