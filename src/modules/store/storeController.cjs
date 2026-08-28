@@ -1112,7 +1112,22 @@ exports.getProductHistory = async (req, res) => {
         sm.reference_type,
         sm.reference_id,
         sm.created_at,
-        u.name AS staff_name
+        u.name AS staff_name,
+
+        CASE
+          WHEN sm.type = 'OUT'
+          AND sm.reference_type = 'sale'
+          THEN (
+            SELECT
+              SUM(si.subtotal) / NULLIF(SUM(si.quantity), 0)
+            FROM sale_items si
+            WHERE si.sale_id = sm.reference_id
+              AND si.product_id = sm.product_id
+              AND si.company_id = sm.company_id
+          )
+          ELSE NULL
+        END AS sale_unit_price
+
       FROM stock_movements sm
       LEFT JOIN users u
         ON u.id = sm.staff_id
