@@ -1100,7 +1100,6 @@ exports.getProductHistory = async (req, res) => {
   try {
 
     const { id } = req.params;
-
     const companyId = req.user.company_id;
 
     const { rows } = await pool.query(
@@ -1110,13 +1109,16 @@ exports.getProductHistory = async (req, res) => {
         sm.type,
         sm.quantity,
         sm.cost_price,
+        sm.reference_type,
+        sm.reference_id,
         sm.created_at,
-        u.name as staff_name
+        u.name AS staff_name
       FROM stock_movements sm
-      LEFT JOIN users u ON u.id = sm.staff_id
+      LEFT JOIN users u
+        ON u.id = sm.staff_id
       WHERE sm.product_id = $1
-      AND sm.company_id = $2
-      ORDER BY sm.created_at ASC
+        AND sm.company_id = $2
+      ORDER BY sm.created_at ASC, sm.id ASC
       `,
       [id, companyId]
     );
@@ -1124,36 +1126,81 @@ exports.getProductHistory = async (req, res) => {
     let stock = 0;
     let totalCost = 0;
 
-    const history = rows.map(r => {
+    const history = rows.map((r) => {
 
-      if(r.type === 'IN'){
-        stock += r.quantity;
-        totalCost += (r.quantity * (r.cost_price || 0));
+      const quantity = Number(r.quantity);
+      const movementCost = Number(r.cost_price || 0);
+
+      if (
+        !Number.isFinite(quantity) ||
+        quantity <= 0
+      ) {
+        throw new Error(
+          `Movimiento ${r.id} con cantidad inválida`
+        );
       }
 
-        if(r.type === 'OUT'){
-        stock -= r.quantity;
+      // =============================
+      // ENTRADA
+      // =============================
+      if (r.type === 'IN') {
 
-        /// 🔥 reducir costo proporcional
-        const avg = stock > 0 ? totalCost / (stock + r.quantity) : 0;
-        totalCost -= avg * r.quantity;
+        stock += quantity;
+        totalCost += quantity * movementCost;
+
+      }
+
+      // =============================
+      // SALIDA
+      // =============================
+      if (r.type === 'OUT') {
+
+        if (quantity > stock) {
+          throw new Error(
+            `Movimiento ${r.id} deja stock negativo`
+          );
         }
+
+        // 🔥 El costo promedio se calcula
+        // ANTES de descontar la salida.
+        const avgBefore =
+          stock > 0
+            ? totalCost / stock
+            : 0;
+
+        stock -= quantity;
+        totalCost -= avgBefore * quantity;
+
+        // Evita residuos decimales cuando stock llega a 0
+        if (stock === 0) {
+          totalCost = 0;
+        }
+      }
+
+      const avgCost =
+        stock > 0
+          ? totalCost / stock
+          : 0;
 
       return {
         ...r,
+        quantity,
+        cost_price: movementCost,
         stock_after: stock,
-        avg_cost: stock > 0 ? totalCost / stock : 0
+        avg_cost: Number(avgCost.toFixed(2)),
       };
-
     });
 
-    res.json(history);
+    return res.json(history);
 
   } catch (err) {
 
-    console.error("HISTORY ERROR", err);
+    console.error(
+      "❌ PRODUCT HISTORY ERROR:",
+      err
+    );
 
-    res.status(500).json({
+    return res.status(500).json({
       error: "Error obteniendo historial"
     });
 
