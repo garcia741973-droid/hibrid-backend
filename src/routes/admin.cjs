@@ -31,26 +31,33 @@ router.put(
 router.get(
   "/admins",
   requireAuth,
+  requireRole(["admin","superadmin"]),
   async (req, res) => {
+
     try {
 
-    const { rows } = await pool.query(
-      `
-      SELECT id, name, email
-      FROM users
-      WHERE role IN ('admin', 'superadmin')
-      AND company_id = $1
-      `,
-      [req.user.company_id]
-    );
+      const { rows } = await pool.query(
+        `
+        SELECT id, name, email
+        FROM users
+        WHERE role IN ('admin', 'superadmin')
+          AND company_id = $1
+        `,
+        [req.user.company_id]
+      );
 
       res.json(rows);
 
     } catch (error) {
+
+      console.error(error);
+
       res.status(500).json({
         error: error.message
       });
+
     }
+
   }
 );
 
@@ -219,7 +226,10 @@ router.put(
         query = `
           UPDATE users
           SET name=$1, last_name=$2, phone=$3, password=$4
-          WHERE id=$5 AND company_id=$6
+          WHERE id=$5
+            AND company_id=$6
+            AND role='staff'
+            AND is_active=true
           RETURNING id,name,email
         `;
 
@@ -237,7 +247,10 @@ router.put(
         query = `
           UPDATE users
           SET name=$1, last_name=$2, phone=$3
-          WHERE id=$4 AND company_id=$5
+          WHERE id=$4
+            AND company_id=$5
+            AND role='staff'
+            AND is_active=true
           RETURNING id,name,email
         `;
 
@@ -251,6 +264,12 @@ router.put(
       }
 
       const { rows } = await pool.query(query, values);
+
+      if (rows.length === 0) {
+        return res.status(404).json({
+          error: "Staff no encontrado"
+        });
+      }
 
       res.json({
         message: "Staff actualizado",
@@ -285,11 +304,13 @@ router.delete(
 
       const { rows } = await pool.query(
         `
-        UPDATE users
-        SET is_active = false
-        WHERE id = $1
-        AND company_id = $2
-        RETURNING id
+          UPDATE users
+          SET is_active = false
+          WHERE id = $1
+            AND company_id = $2
+            AND role = 'staff'
+            AND is_active = true
+          RETURNING id
         `,
         [id, req.user.company_id]
       );

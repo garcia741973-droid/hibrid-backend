@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { pool } = require('../config/db');
 const requireAuth = require('../middlewares/requireAuth.cjs');
+const requireRole = require('../middlewares/requireRole.cjs');
 
 const ExcelJS = require('exceljs');
 const PDFDocument = require('pdfkit');
@@ -9,15 +10,57 @@ const PDFDocument = require('pdfkit');
 // =========================
 // ➕ ADD EXPENSE (GASTO)
 // =========================
-router.post('/add-expense', requireAuth, async (req, res) => {
+router.post(
+  '/add-expense',
+  requireAuth,
+  requireRole(['staff', 'admin', 'superadmin']),
+  async (req, res) => {
   try {
     const { amount, description, category_id } = req.body;
 
-    if (!amount) {
-      return res.status(400).json({ error: 'Monto requerido' });
+    const parsedAmount = Number(amount);
+
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      return res.status(400).json({
+        error: 'El monto debe ser un número mayor a cero'
+      });
     }
 
     const company_id = req.user.company_id;
+
+    // =========================
+    // VALIDAR CATEGORÍA
+    // =========================
+    let validCategoryId = null;
+
+    if (category_id !== undefined && category_id !== null && category_id !== '') {
+
+      const categoryId = Number.parseInt(category_id, 10);
+
+      if (!Number.isInteger(categoryId) || categoryId <= 0) {
+        return res.status(400).json({
+          error: 'Categoría inválida'
+        });
+      }
+
+      const categoryResult = await pool.query(
+        `
+        SELECT id
+        FROM expense_categories
+        WHERE id = $1
+          AND company_id = $2
+        `,
+        [categoryId, company_id]
+      );
+
+      if (categoryResult.rows.length === 0) {
+        return res.status(400).json({
+          error: 'La categoría no pertenece a esta empresa'
+        });
+      }
+
+      validCategoryId = categoryId;
+    }
 
     await pool.query(
       `
@@ -25,14 +68,14 @@ router.post('/add-expense', requireAuth, async (req, res) => {
       (type, reference_type, amount, staff_id, description, category_id, created_by_role, company_id)
       VALUES ('expense', 'manual', $1, $2, $3, $4, $5, $6)
       `,
-      [
-        amount,
-        req.user.id,
-        description || '',
-        category_id || null,
-        req.user.role,
-        company_id
-      ]
+        [
+          parsedAmount,
+          req.user.id,
+          description || '',
+          validCategoryId,
+          req.user.role,
+          company_id
+        ]
     );
 
     res.json({ message: 'Gasto registrado correctamente' });
@@ -47,13 +90,21 @@ router.post('/add-expense', requireAuth, async (req, res) => {
 // =========================
 // ➕ ADD INCOME (INGRESO)
 // =========================
-router.post('/add-income', requireAuth, async (req, res) => {
+router.post(
+  '/add-income',
+  requireAuth,
+  requireRole(['staff', 'admin', 'superadmin']),
+  async (req, res) => {
   try {
-    const { amount, description } = req.body;
+        const { amount, description } = req.body;
 
-    if (!amount) {
-      return res.status(400).json({ error: 'Monto requerido' });
-    }
+        const parsedAmount = Number(amount);
+
+        if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+          return res.status(400).json({
+            error: 'El monto debe ser un número mayor a cero'
+          });
+        }
 
     const company_id = req.user.company_id;
 
@@ -63,13 +114,13 @@ router.post('/add-income', requireAuth, async (req, res) => {
       (type, reference_type, amount, staff_id, description, created_by_role, company_id)
       VALUES ('income', 'manual', $1, $2, $3, $4, $5)
       `,
-      [
-        amount,
-        req.user.id,
-        description || '',
-        req.user.role,
-        company_id
-      ]
+        [
+          parsedAmount,
+          req.user.id,
+          description || '',
+          req.user.role,
+          company_id
+        ]
     );
 
     res.json({ message: 'Ingreso registrado correctamente' });
@@ -84,7 +135,11 @@ router.post('/add-income', requireAuth, async (req, res) => {
 // =========================
 // 📊 REPORT (RESUMEN CAJA)
 // =========================
-router.get('/report', requireAuth, async (req, res) => {
+router.get(
+  '/report',
+  requireAuth,
+  requireRole(['admin', 'superadmin']),
+  async (req, res) => {
   try {
     const { from, to } = req.query;
 
@@ -139,7 +194,11 @@ router.get('/report', requireAuth, async (req, res) => {
 // =========================
 // 📜 MOVEMENTS (LISTADO)
 // =========================
-router.get('/movements', requireAuth, async (req, res) => {
+router.get(
+  '/movements',
+  requireAuth,
+  requireRole(['admin', 'superadmin']),
+  async (req, res) => {
   try {
     const { from, to } = req.query;
 
@@ -176,7 +235,11 @@ router.get('/movements', requireAuth, async (req, res) => {
 // =========================
 // 📦 CATEGORIES (GASTOS)
 // =========================
-router.get('/categories', requireAuth, async (req, res) => {
+router.get(
+  '/categories',
+  requireAuth,
+  requireRole(['staff', 'admin', 'superadmin']),
+  async (req, res) => {
   try {
       const company_id = req.user.company_id;
 
@@ -200,7 +263,11 @@ router.get('/categories', requireAuth, async (req, res) => {
 // =========================
 // 📥 EXPORT EXCEL
 // =========================
-router.get('/export.xlsx', requireAuth, async (req, res) => {
+router.get(
+  '/export.xlsx',
+  requireAuth,
+  requireRole(['admin', 'superadmin']),
+  async (req, res) => {
   try {
 
     const { from, to } = req.query;
@@ -266,7 +333,11 @@ router.get('/export.xlsx', requireAuth, async (req, res) => {
 // =========================
 // 📥 EXPORT PDF
 // =========================
-router.get('/export.pdf', requireAuth, async (req, res) => {
+router.get(
+  '/export.pdf',
+  requireAuth,
+  requireRole(['admin', 'superadmin']),
+  async (req, res) => {
   try {
 
     const { from, to } = req.query;
@@ -319,7 +390,11 @@ router.get('/export.pdf', requireAuth, async (req, res) => {
 // =========================
 // 📥 EXPORT FULL (EXCEL PRO)
 // =========================
-router.get('/export-full.xlsx', requireAuth, async (req, res) => {
+router.get(
+  '/export-full.xlsx',
+  requireAuth,
+  requireRole(['admin', 'superadmin']),
+  async (req, res) => {
   try {
 
     const { from, to } = req.query;
@@ -415,7 +490,11 @@ router.get('/export-full.xlsx', requireAuth, async (req, res) => {
 // =========================
 // 💰 SALDO REAL CAJA
 // =========================
-router.get('/balance', requireAuth, async (req, res) => {
+router.get(
+  '/balance',
+  requireAuth,
+  requireRole(['admin', 'superadmin']),
+  async (req, res) => {
   try {
 
     const company_id = req.user.company_id;

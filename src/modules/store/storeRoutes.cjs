@@ -4,6 +4,7 @@ const router = express.Router();
 const storeController = require('./storeController.cjs');
 
 const requireAuth = require('../../middlewares/requireAuth.cjs');
+const requireRole = require('../../middlewares/requireRole.cjs');
 const requireAdminModule = require('../../middlewares/requireAdmin.cjs');
 
 const requireAdmin = requireAdminModule.default || requireAdminModule;
@@ -19,7 +20,12 @@ router.put('/products/:id', requireAuth, requireAdmin, storeController.updatePro
 
 /// VENTAS
 
-router.post('/sales', requireAuth, storeController.createSale);
+router.post(
+  '/sales',
+  requireAuth,
+  requireRole(['staff', 'admin', 'superadmin']),
+  storeController.createSale
+);
 
 
 /// CANCELAR VENTA
@@ -48,12 +54,14 @@ router.get(
 router.get(
   '/inventory/report',
   requireAuth,
+  requireRole(['admin', 'superadmin']),
   storeController.getInventoryReport
 );
 
 router.get(
   '/inventory/export-full.xlsx',
   requireAuth,
+  requireRole(['admin', 'superadmin']),
   storeController.exportInventoryExcel
 );
 

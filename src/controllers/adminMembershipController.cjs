@@ -42,80 +42,192 @@ exports.getRequests = async (req,res)=>{
 // =============================
 // APROBAR MEMBRESÍA
 // =============================
-exports.approveMembership = async (req,res)=>{
+exports.approveMembership = async (req, res) => {
 
-  try{
+  const client = await pool.connect();
+
+  try {
+
+    await client.query('BEGIN');
 
     const request_id = req.params.id;
     const companyId = req.user.company_id;
 
-    const result = await pool.query(
-      `SELECT mr.*, p.duration_days, p.price
-       FROM membership_requests mr
-       JOIN plans p ON mr.plan_id = p.id
-       WHERE mr.id=$1 AND mr.company_id=$2`,
+    // =============================
+    // 1️⃣ OBTENER SOLICITUD + PLAN
+    // =============================
+    const result = await client.query(
+      `
+      SELECT
+        mr.*,
+        p.duration_days,
+        p.price
+      FROM membership_requests mr
+      JOIN plans p
+        ON mr.plan_id = p.id
+       AND p.company_id = mr.company_id
+      WHERE mr.id = $1
+        AND mr.company_id = $2
+      FOR UPDATE
+      `,
       [request_id, companyId]
     );
 
-    if(result.rows.length===0){
-      return res.status(404).json({error:"Solicitud no encontrada o no autorizada"});
+    if (result.rows.length === 0) {
+
+      await client.query('ROLLBACK');
+
+      return res.status(404).json({
+        error: "Solicitud no encontrada o no autorizada"
+      });
     }
 
     const request = result.rows[0];
 
-    const startDate = new Date(request.start_date);
-    const today = new Date();
+    // =============================
+    // 2️⃣ EVITAR DOBLE APROBACIÓN
+    // =============================
+    if (request.status === 'approved') {
 
-    today.setHours(0,0,0,0);
-    startDate.setHours(0,0,0,0);
+      await client.query('ROLLBACK');
 
-    if(startDate < today){
       return res.status(400).json({
-        error:"La fecha de inicio no puede ser anterior a hoy"
+        error: "Esta membresía ya fue aprobada"
       });
     }
 
-    const endDate = new Date(startDate);
-    endDate.setDate(endDate.getDate() + request.duration_days);
+    if (request.status !== 'pending') {
 
-    // 🔥 ACTUALIZAR USUARIO (con seguridad)
-    const updateUser = await pool.query(
-      `UPDATE users
-       SET membership_start=$1,
-           membership_end=$2
-       WHERE id=$3 AND company_id=$4`,
-       [
+      await client.query('ROLLBACK');
+
+      return res.status(400).json({
+        error: "La solicitud ya no está pendiente"
+      });
+    }
+
+    // =============================
+    // 3️⃣ RESPETAR FECHA SOLICITADA
+    // =============================
+    const startDate = new Date(request.start_date);
+
+    if (Number.isNaN(startDate.getTime())) {
+
+      await client.query('ROLLBACK');
+
+      return res.status(400).json({
+        error: "Fecha de inicio inválida"
+      });
+    }
+
+    // 🔥 IMPORTANTE:
+    // Ya NO bloqueamos si start_date quedó en el pasado.
+    // Se respeta la fecha originalmente solicitada.
+
+    const endDate = new Date(startDate);
+
+    endDate.setDate(
+      endDate.getDate() + Number(request.duration_days)
+    );
+
+    // =============================
+    // 4️⃣ ACTUALIZAR USUARIO
+    // =============================
+    const updateUser = await client.query(
+      `
+      UPDATE users
+      SET
+        membership_start = $1,
+        membership_end = $2,
+        membership_status = 'active',
+        updated_at = NOW()
+      WHERE id = $3
+        AND company_id = $4
+        AND role = 'client'
+      RETURNING id
+      `,
+      [
         startDate,
         endDate,
         request.user_id,
         companyId
-       ]
+      ]
     );
 
-    if(updateUser.rowCount === 0){
-      throw new Error("Usuario no autorizado");
+    if (updateUser.rowCount === 0) {
+      throw new Error("Cliente no encontrado o no autorizado");
     }
 
-    // 🔥 ACTUALIZAR REQUEST
-    await pool.query(
-      `UPDATE membership_requests
-       SET status='approved',
-           end_date=$1,
-           approved_by=$2,
-           approved_at=NOW()
-       WHERE id=$3 AND company_id=$4`,
-       [endDate, req.user.id, request_id, companyId]
+    // =============================
+    // 5️⃣ CREAR HISTORIAL MEMBERSHIP
+    // =============================
+    const membershipResult = await client.query(
+      `
+      INSERT INTO memberships
+      (
+        user_id,
+        plan_id,
+        start_date,
+        end_date,
+        price,
+        created_by,
+        company_id
+      )
+      VALUES ($1,$2,$3,$4,$5,$6,$7)
+      RETURNING id
+      `,
+      [
+        request.user_id,
+        request.plan_id,
+        startDate,
+        endDate,
+        request.price,
+        req.user.id,
+        companyId
+      ]
     );
 
-    console.log("🔥 APROBANDO MEMBRESIA:", request_id);
-    console.log("💰 PRICE:", request.price);
+    const membershipId = membershipResult.rows[0].id;
 
-    // 💰 REGISTRAR INGRESO (CON EMPRESA)
-    await pool.query(
+    // =============================
+    // 6️⃣ APROBAR SOLICITUD
+    // =============================
+    await client.query(
+      `
+      UPDATE membership_requests
+      SET
+        status = 'approved',
+        end_date = $1,
+        approved_by = $2,
+        approved_at = NOW()
+      WHERE id = $3
+        AND company_id = $4
+      `,
+      [
+        endDate,
+        req.user.id,
+        request_id,
+        companyId
+      ]
+    );
+
+    // =============================
+    // 7️⃣ REGISTRAR INGRESO EN CAJA
+    // =============================
+    await client.query(
       `
       INSERT INTO cash_movements
-      (type, reference_type, reference_id, amount, staff_id, description, created_by_role, company_id)
-      VALUES ('income', 'membership', $1, $2, $3, $4, $5, $6)
+      (
+        type,
+        reference_type,
+        reference_id,
+        amount,
+        staff_id,
+        description,
+        created_by_role,
+        company_id
+      )
+      VALUES
+      ('income','membership',$1,$2,$3,$4,$5,$6)
       `,
       [
         request_id,
@@ -125,23 +237,49 @@ exports.approveMembership = async (req,res)=>{
         req.user.role,
         companyId
       ]
-    );    
+    );
+
+    // =============================
+    // 8️⃣ TODO CORRECTO
+    // =============================
+    await client.query('COMMIT');
+
+    console.log(
+      "✅ MEMBRESÍA APROBADA:",
+      request_id,
+      "MEMBERSHIP:",
+      membershipId
+    );
 
     res.json({
-      message:"Membresía activada",
-      start_date:startDate,
-      end_date:endDate
+      message: "Membresía activada",
+      membership_id: membershipId,
+      start_date: startDate,
+      end_date: endDate
     });
 
-  }catch(err){
+  } catch (err) {
 
-    console.error(err);
-    res.status(500).json({error:"Error aprobando membresía"});
+    try {
+      await client.query('ROLLBACK');
+    } catch (_) {}
+
+    console.error(
+      "❌ ERROR APROBANDO MEMBRESÍA:",
+      err
+    );
+
+    res.status(500).json({
+      error: "Error aprobando membresía"
+    });
+
+  } finally {
+
+    client.release();
 
   }
 
 };
-
 
 // =============================
 // VALIDAR QR

@@ -78,60 +78,131 @@ exports.requestMembership = async (req, res) => {
 
   try {
 
-    const user_id = req.body.user_id || req.user.id;
+    // 🔒 SIEMPRE el usuario autenticado.
+    // Nunca aceptar user_id enviado desde Flutter.
+    const user_id = req.user.id;
     const companyId = req.user.company_id;
 
-    const plan_id = parseInt(req.body.plan_id);
+    const plan_id = Number.parseInt(req.body.plan_id, 10);
     const start_date = req.body.start_date;
-    const payment_proof_url = req.body.payment_proof_url || null;
+    const payment_proof_url =
+      req.body.payment_proof_url || null;
 
-    console.log("BODY:", req.body);
-
-    if (!plan_id) {
+    // =============================
+    // 1️⃣ VALIDAR DATOS
+    // =============================
+    if (!Number.isInteger(plan_id) || plan_id <= 0) {
       return res.status(400).json({
         error: "Plan inválido"
       });
     }
 
-    // validar plan
+    if (!start_date) {
+      return res.status(400).json({
+        error: "Fecha de inicio obligatoria"
+      });
+    }
+
+    // Validamos como DATE directamente en PostgreSQL
+    // para evitar problemas de zona horaria de JavaScript.
+    const dateCheck = await pool.query(
+      `
+      SELECT $1::date AS start_date
+      `,
+      [start_date]
+    );
+
+    const validStartDate = dateCheck.rows[0].start_date;
+
+    // =============================
+    // 2️⃣ VALIDAR CLIENTE
+    // =============================
+    const userResult = await pool.query(
+      `
+      SELECT id
+      FROM users
+      WHERE id = $1
+        AND company_id = $2
+        AND role = 'client'
+        AND is_active = true
+      `,
+      [user_id, companyId]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(403).json({
+        error: "Cliente no autorizado"
+      });
+    }
+
+    // =============================
+    // 3️⃣ VALIDAR PLAN
+    // =============================
     const planResult = await pool.query(
-      `SELECT duration_days FROM plans WHERE id=$1 AND company_id=$2`,
+      `
+      SELECT duration_days
+      FROM plans
+      WHERE id = $1
+        AND company_id = $2
+        AND is_active = true
+      `,
       [plan_id, companyId]
     );
 
     if (planResult.rows.length === 0) {
       return res.status(400).json({
-        error: "Plan no encontrado"
+        error: "Plan no encontrado o no disponible"
       });
     }
 
-    const duration = planResult.rows[0].duration_days;
+    const duration =
+      Number(planResult.rows[0].duration_days);
 
-    // calcular end_date
+    if (!Number.isInteger(duration) || duration <= 0) {
+      return res.status(400).json({
+        error: "Duración del plan inválida"
+      });
+    }
+
+    // =============================
+    // 4️⃣ CALCULAR END DATE
+    // =============================
     const endResult = await pool.query(
-      `SELECT ($1::date + $2 * INTERVAL '1 day') as end_date`,
+      `
+      SELECT
+        ($1::date + $2 * INTERVAL '1 day')::date
+        AS end_date
+      `,
       [start_date, duration]
     );
 
     const end_date = endResult.rows[0].end_date;
 
-    // validar superposición
+    // =============================
+    // 5️⃣ VALIDAR SUPERPOSICIÓN
+    // =============================
     const overlapCheck = await pool.query(
       `
       SELECT id
       FROM membership_requests
       WHERE user_id = $1
-      AND company_id = $2
-      AND status IN ('pending','approved')
-      AND (
-        (start_date <= $3 AND end_date >= $3)
-        OR
-        (start_date <= $4 AND end_date >= $4)
-        OR
-        ($3 <= start_date AND $4 >= end_date)
-      )
+        AND company_id = $2
+        AND status IN ('pending','approved')
+        AND (
+          (start_date <= $3 AND end_date >= $3)
+          OR
+          (start_date <= $4 AND end_date >= $4)
+          OR
+          ($3 <= start_date AND $4 >= end_date)
+        )
+      LIMIT 1
       `,
-      [user_id, companyId, start_date, end_date]
+      [
+        user_id,
+        companyId,
+        validStartDate,
+        end_date
+      ]
     );
 
     if (overlapCheck.rows.length > 0) {
@@ -140,29 +211,49 @@ exports.requestMembership = async (req, res) => {
       });
     }
 
-    // INSERT FINAL
+    // =============================
+    // 6️⃣ CREAR SOLICITUD
+    // =============================
     const insert = await pool.query(
-      `INSERT INTO membership_requests
-       (user_id, plan_id, start_date, end_date, payment_proof_url, company_id)
-       VALUES ($1,$2,$3,$4,$5,$6)
-       RETURNING *`,
-      [user_id, plan_id, start_date, end_date, payment_proof_url, companyId]
+      `
+      INSERT INTO membership_requests
+      (
+        user_id,
+        plan_id,
+        start_date,
+        end_date,
+        payment_proof_url,
+        company_id
+      )
+      VALUES ($1,$2,$3,$4,$5,$6)
+      RETURNING *
+      `,
+      [
+        user_id,
+        plan_id,
+        validStartDate,
+        end_date,
+        payment_proof_url,
+        companyId
+      ]
     );
 
-    res.json(insert.rows[0]);
+    return res.json(insert.rows[0]);
 
   } catch (err) {
 
-    console.error("ERROR REAL:", err);
+    console.error(
+      "❌ ERROR SOLICITANDO MEMBRESÍA:",
+      err
+    );
 
-    res.status(500).json({
-      error: err.message
+    return res.status(500).json({
+      error: "Error creando solicitud de membresía"
     });
 
   }
 
 };
-
 
 // =============================
 // OBTENER DATOS DEL CLIENTE

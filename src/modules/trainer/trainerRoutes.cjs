@@ -34,9 +34,12 @@ router.get('/clients', requireAuth, controller.getClients);
 router.get('/my-packages', requireAuth, controller.getMyPackages);
 
 // =============================
-// 🔔 RECORDATORIOS
+// 🔔 RECORDATORIOS INTERNOS
 // =============================
+
+// Usado internamente por el cron del servidor.
+// TODO: mover la consulta a un servicio interno
+// y eliminar esta ruta HTTP.
 router.get('/reminders', controller.getSessionReminders);
-router.post('/reminder-sent', controller.markReminderSent);
 
 module.exports = router;

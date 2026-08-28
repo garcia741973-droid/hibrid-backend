@@ -88,45 +88,119 @@ const axios = require("axios");
 
 const API_URL = "https://hibrid-backend.onrender.com";
 
+// =============================
+// 🔔 RECORDATORIOS TRAINER
+// =============================
 cron.schedule("* * * * *", async () => {
+
   try {
 
-    console.log("⏰ CRON EJECUTANDO...");
+    console.log("⏰ CRON RECORDATORIOS EJECUTANDO...");
 
-    const res = await axios.get(`${API_URL}/trainer/reminders`);
+    // 1️⃣ Buscar sesiones que necesitan recordatorio
+    const response = await axios.get(
+      `${API_URL}/trainer/reminders`
+    );
 
-    const sessions = res.data;
+    const sessions = response.data;
 
     if (!sessions || sessions.length === 0) {
       console.log("📭 No hay recordatorios");
       return;
     }
 
-    console.log("🔥 RECORDATORIOS ENCONTRADOS:", sessions.length);
+    console.log(
+      "🔥 RECORDATORIOS ENCONTRADOS:",
+      sessions.length
+    );
 
+    // 2️⃣ Procesar uno por uno
     for (const s of sessions) {
 
       if (!s.fcm_token) {
-        console.log("❌ Sin token:", s.client_id);
+        console.log(
+          "❌ Cliente sin FCM token:",
+          s.client_id
+        );
         continue;
       }
 
-      await axios.post(`${API_URL}/notifications/send`, {
-        token: s.fcm_token,
-        title: "Entrenamiento próximo 💪",
-        body: `Hola ${s.name}, tienes sesión pronto`,
-        data: {
-          type: "session_reminder",
-          sessionId: s.id.toString()
-        }
-      });
+      try {
 
-      console.log("✅ Notificación enviada a:", s.name);
+        // 3️⃣ Enviar directamente con Firebase Admin
+        await admin.messaging().send({
+          token: s.fcm_token,
+
+          notification: {
+            title: "Entrenamiento próximo 💪",
+            body: `Hola ${s.name}, tienes sesión pronto`,
+          },
+
+          data: {
+            type: "session_reminder",
+            sessionId: s.id.toString(),
+          },
+
+          android: {
+            priority: "high",
+            notification: {
+              sound: "default",
+              channelId: "high_importance_channel",
+            },
+          },
+
+          apns: {
+            headers: {
+              "apns-priority": "10",
+            },
+            payload: {
+              aps: {
+                sound: "default",
+                badge: 1,
+              },
+            },
+          },
+        });
+
+        // 4️⃣ SOLO si Firebase respondió OK:
+        // marcar recordatorio como enviado
+        await pool.query(
+          `
+          UPDATE trainer_sessions
+          SET reminder_sent = true
+          WHERE id = $1
+            AND reminder_sent = false
+          `,
+          [s.id]
+        );
+
+        console.log(
+          "✅ Recordatorio enviado y marcado:",
+          s.id,
+          s.name
+        );
+
+      } catch (sendError) {
+
+        console.error(
+          "❌ ERROR ENVIANDO RECORDATORIO:",
+          s.id,
+          sendError.message
+        );
+
+      }
+
     }
 
   } catch (error) {
-    console.error("❌ ERROR CRON:", error.message);
+
+    console.error(
+      "❌ ERROR CRON RECORDATORIOS:",
+      error.message
+    );
+
   }
+
 });
 
 const membershipRoutes = require('./routes/membership.cjs');

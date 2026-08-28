@@ -74,212 +74,531 @@ exports.createProduct = async (req, res) => {
 }
 };
 
-exports.createSale = async (req,res)=>{
+exports.createSale = async (req, res) => {
 
   const client = await pool.connect();
 
-  try{
+  try {
 
     await client.query('BEGIN');
 
     const staffId = req.user.id;
+    const companyId = req.user.company_id;
     const { items } = req.body;
+
+    // =============================
+    // 1️⃣ VALIDAR VENTA
+    // =============================
+    if (!Array.isArray(items) || items.length === 0) {
+      throw new Error("La venta no contiene productos");
+    }
 
     let total = 0;
 
-    const companyId = req.user.company_id;
-
+    // =============================
+    // 2️⃣ CREAR CABECERA
+    // =============================
     const sale = await client.query(
-      `INSERT INTO sales (staff_id,total,company_id)
-      VALUES ($1,0,$2)
-      RETURNING id`,
+      `
+      INSERT INTO sales
+      (staff_id, total, company_id)
+      VALUES ($1, 0, $2)
+      RETURNING id
+      `,
       [staffId, companyId]
     );
 
-    if (!sale.rows[0]) {
+    if (sale.rows.length === 0) {
       throw new Error("Error creando venta");
     }
 
     const saleId = sale.rows[0].id;
 
-    for(const item of items){
+    // =============================
+    // 3️⃣ PROCESAR PRODUCTOS
+    // =============================
+    for (const item of items) {
 
-      const product = await client.query(
-        `SELECT stock,is_active
-        FROM products
-        WHERE id=$1 AND company_id=$2`,
-        [item.product_id, companyId]
+      const productId = Number.parseInt(
+        item.product_id,
+        10
       );
 
-      if(product.rows.length===0)
-        throw new Error('Producto no existe');
+      const quantity = Number.parseInt(
+        item.quantity,
+        10
+      );
+
+      if (
+        !Number.isInteger(productId) ||
+        productId <= 0
+      ) {
+        throw new Error("Producto inválido");
+      }
+
+      if (
+        !Number.isInteger(quantity) ||
+        quantity <= 0
+      ) {
+        throw new Error("Cantidad inválida");
+      }
+
+      // 🔒 Bloqueamos el producto durante la venta
+      // y obtenemos precio/costo DESDE PostgreSQL.
+      const product = await client.query(
+        `
+        SELECT
+          id,
+          name,
+          stock,
+          price,
+          cost_price,
+          is_active
+        FROM products
+        WHERE id = $1
+          AND company_id = $2
+        FOR UPDATE
+        `,
+        [
+          productId,
+          companyId
+        ]
+      );
+
+      if (product.rows.length === 0) {
+        throw new Error("Producto no existe");
+      }
 
       const p = product.rows[0];
 
-      if(!p.is_active)
-        throw new Error('Producto inactivo');
+      if (!p.is_active) {
+        throw new Error(
+          `Producto inactivo: ${p.name}`
+        );
+      }
 
-      if(p.stock < item.quantity)
-        throw new Error('Stock insuficiente');
+      if (Number(p.stock) < quantity) {
+        throw new Error(
+          `Stock insuficiente: ${p.name}`
+        );
+      }
 
-      const subtotal = item.quantity * item.unit_price;
+      // =============================
+      // 🔒 PRECIO AUTORITATIVO BACKEND
+      // =============================
+      const unitPrice = Number(p.price);
+      const costPrice = Number(p.cost_price || 0);
+
+      if (
+        !Number.isFinite(unitPrice) ||
+        unitPrice < 0
+      ) {
+        throw new Error(
+          `Precio inválido: ${p.name}`
+        );
+      }
+
+      if (
+        !Number.isFinite(costPrice) ||
+        costPrice < 0
+      ) {
+        throw new Error(
+          `Costo inválido: ${p.name}`
+        );
+      }
+
+      const subtotal = quantity * unitPrice;
 
       total += subtotal;
 
+      // =============================
+      // 4️⃣ DETALLE DE VENTA
+      // =============================
       await client.query(
         `
         INSERT INTO sale_items
-        (sale_id,product_id,quantity,unit_price,subtotal,company_id)
+        (
+          sale_id,
+          product_id,
+          quantity,
+          unit_price,
+          subtotal,
+          company_id
+        )
         VALUES ($1,$2,$3,$4,$5,$6)
         `,
         [
           saleId,
-          item.product_id,
-          item.quantity,
-          item.unit_price,
+          productId,
+          quantity,
+          unitPrice,
           subtotal,
           companyId
         ]
       );
 
-        /// DESCUENTA STOCK
-        const update = await client.query(
-          `
-          UPDATE products
-          SET stock = stock - $1
-          WHERE id=$2 
-          AND company_id=$3
+      // =============================
+      // 5️⃣ DESCONTAR STOCK
+      // =============================
+      const update = await client.query(
+        `
+        UPDATE products
+        SET stock = stock - $1
+        WHERE id = $2
+          AND company_id = $3
           AND stock >= $1
-          RETURNING stock
-          `,
-          [item.quantity, item.product_id, companyId]
-        );
+        RETURNING stock
+        `,
+        [
+          quantity,
+          productId,
+          companyId
+        ]
+      );
 
-        if(update.rows.length === 0){
-          throw new Error('Stock insuficiente (concurrente)');
-        }
-
-        /// 🔥 REGISTRAR SALIDA (VENTA) ✅ CON COSTO
-        await client.query(
-          `
-          INSERT INTO stock_movements
-          (product_id, type, quantity, cost_price, staff_id, company_id, reference_type, reference_id)
-          VALUES ($1, 'OUT', $2, $3, $4, $5, 'sale', $6)
-          `,
-          [
-            item.product_id,
-            item.quantity,
-            item.unit_price, // 🔥 CLAVE (o cost_price si quieres exactitud contable)
-            staffId,
-            companyId,
-            saleId
-          ]
+      if (update.rows.length === 0) {
+        throw new Error(
+          `Stock insuficiente: ${p.name}`
         );
+      }
+
+      // =============================
+      // 6️⃣ MOVIMIENTO DE INVENTARIO
+      // IMPORTANTE:
+      // cost_price = COSTO, NO precio venta
+      // =============================
+      await client.query(
+        `
+        INSERT INTO stock_movements
+        (
+          product_id,
+          type,
+          quantity,
+          cost_price,
+          staff_id,
+          company_id,
+          reference_type,
+          reference_id
+        )
+        VALUES
+        ($1,'OUT',$2,$3,$4,$5,'sale',$6)
+        `,
+        [
+          productId,
+          quantity,
+          costPrice,
+          staffId,
+          companyId,
+          saleId
+        ]
+      );
 
     }
 
+    // =============================
+    // 7️⃣ TOTAL DEFINITIVO
+    // =============================
     await client.query(
       `
       UPDATE sales
-      SET total=$1
-      WHERE id=$2 AND company_id=$3
+      SET total = $1
+      WHERE id = $2
+        AND company_id = $3
       `,
-      [total, saleId, companyId]
+      [
+        total,
+        saleId,
+        companyId
+      ]
     );
 
-
+    // =============================
+    // 8️⃣ INGRESO EN CAJA
+    // =============================
     await client.query(
       `
       INSERT INTO cash_movements
-      (type,reference_type,reference_id,amount,staff_id,company_id)
-      VALUES ('income','sale',$1,$2,$3,$4)
+      (
+        type,
+        reference_type,
+        reference_id,
+        amount,
+        staff_id,
+        company_id
+      )
+      VALUES
+      ('income','sale',$1,$2,$3,$4)
       `,
-      [saleId, total, staffId, companyId]
+      [
+        saleId,
+        total,
+        staffId,
+        companyId
+      ]
     );
 
+    // =============================
+    // 9️⃣ TODO CORRECTO
+    // =============================
     await client.query('COMMIT');
 
-    res.json({
-      success:true,
-      sale_id:saleId,
+    return res.json({
+      success: true,
+      sale_id: saleId,
       total
     });
 
-  }catch(err){
+  } catch (err) {
 
-    await client.query('ROLLBACK');
+    try {
+      await client.query('ROLLBACK');
+    } catch (_) {}
 
-    res.status(400).json({
-      error:err.message
+    console.error(
+      "❌ ERROR CREANDO VENTA:",
+      err
+    );
+
+    return res.status(400).json({
+      error: err.message
     });
 
-  }finally{
+  } finally {
+
     client.release();
+
   }
 
 };
 
-exports.cancelSale = async (req,res)=>{
+exports.cancelSale = async (req, res) => {
 
   const client = await pool.connect();
 
-  try{
+  try {
 
     await client.query('BEGIN');
 
     const saleId = req.params.id;
-
     const companyId = req.user.company_id;
+    const staffId = req.user.id;
 
-    const items = await client.query(
+    // =============================
+    // 1️⃣ BUSCAR Y BLOQUEAR VENTA
+    // =============================
+    const saleResult = await client.query(
       `
-      SELECT product_id,quantity
-      FROM sale_items
-      WHERE sale_id=$1 AND company_id=$2
+      SELECT id, total, status
+      FROM sales
+      WHERE id = $1
+        AND company_id = $2
+      FOR UPDATE
       `,
-      [saleId, companyId]
+      [
+        saleId,
+        companyId
+      ]
     );
 
+    if (saleResult.rows.length === 0) {
 
-      if (items.rows.length === 0) {
-        throw new Error("Venta no encontrada o no autorizada");
-      }    
+      await client.query('ROLLBACK');
 
-    for(const item of items.rows){
+      return res.status(404).json({
+        error: "Venta no encontrada o no autorizada"
+      });
+    }
 
-      await client.query(
+    const sale = saleResult.rows[0];
+
+    // =============================
+    // 2️⃣ EVITAR DOBLE ANULACIÓN
+    // =============================
+    if (sale.status === 'cancelled') {
+
+      await client.query('ROLLBACK');
+
+      return res.status(400).json({
+        error: "La venta ya fue anulada"
+      });
+    }
+
+    // =============================
+    // 3️⃣ OBTENER ITEMS + COSTO
+    // =============================
+    const items = await client.query(
+      `
+      SELECT
+        si.product_id,
+        si.quantity,
+        COALESCE(sm.cost_price, p.cost_price, 0)
+          AS cost_price
+      FROM sale_items si
+
+      LEFT JOIN stock_movements sm
+        ON sm.reference_type = 'sale'
+       AND sm.reference_id = si.sale_id
+       AND sm.product_id = si.product_id
+       AND sm.type = 'OUT'
+       AND sm.company_id = si.company_id
+
+      LEFT JOIN products p
+        ON p.id = si.product_id
+       AND p.company_id = si.company_id
+
+      WHERE si.sale_id = $1
+        AND si.company_id = $2
+      `,
+      [
+        saleId,
+        companyId
+      ]
+    );
+
+    if (items.rows.length === 0) {
+      throw new Error(
+        "La venta no contiene productos"
+      );
+    }
+
+    // =============================
+    // 4️⃣ DEVOLVER INVENTARIO
+    // =============================
+    for (const item of items.rows) {
+
+      const quantity = Number(item.quantity);
+      const costPrice = Number(item.cost_price || 0);
+
+      const productUpdate = await client.query(
         `
         UPDATE products
         SET stock = stock + $1
-        WHERE id=$2 AND company_id=$3
+        WHERE id = $2
+          AND company_id = $3
+        RETURNING id
         `,
-        [item.quantity, item.product_id, companyId]
+        [
+          quantity,
+          item.product_id,
+          companyId
+        ]
       );
-  
+
+      if (productUpdate.rows.length === 0) {
+        throw new Error(
+          `Producto ${item.product_id} no encontrado`
+        );
+      }
+
+      // =============================
+      // 5️⃣ REGISTRAR DEVOLUCIÓN
+      // =============================
+      await client.query(
+        `
+        INSERT INTO stock_movements
+        (
+          product_id,
+          type,
+          quantity,
+          cost_price,
+          staff_id,
+          company_id,
+          reference_type,
+          reference_id
+        )
+        VALUES
+        ($1,'IN',$2,$3,$4,$5,'sale_cancel',$6)
+        `,
+        [
+          item.product_id,
+          quantity,
+          costPrice,
+          staffId,
+          companyId,
+          saleId
+        ]
+      );
 
     }
 
-    await client.query(
+    // =============================
+    // 6️⃣ ANULAR VENTA
+    // =============================
+    const cancelResult = await client.query(
       `
       UPDATE sales
-      SET status='cancelled'
-      WHERE id=$1 AND company_id=$2
+      SET status = 'cancelled'
+      WHERE id = $1
+        AND company_id = $2
+        AND status <> 'cancelled'
+      RETURNING id
       `,
-      [saleId, companyId]
+      [
+        saleId,
+        companyId
+      ]
     );
 
+    if (cancelResult.rows.length === 0) {
+      throw new Error(
+        "No se pudo anular la venta"
+      );
+    }
+
+    // =============================
+    // 7️⃣ REVERSAR CAJA
+    // =============================
+    await client.query(
+      `
+      INSERT INTO cash_movements
+      (
+        type,
+        reference_type,
+        reference_id,
+        amount,
+        staff_id,
+        company_id
+      )
+      VALUES
+      ('expense','sale_cancel',$1,$2,$3,$4)
+      `,
+      [
+        saleId,
+        Number(sale.total),
+        staffId,
+        companyId
+      ]
+    );
+
+    // =============================
+    // 8️⃣ TODO OK
+    // =============================
     await client.query('COMMIT');
 
-    res.json({success:true});
+    return res.json({
+      success: true,
+      message: "Venta anulada correctamente"
+    });
 
-  }catch(err){
+  } catch (err) {
 
-    await client.query('ROLLBACK');
+    try {
+      await client.query('ROLLBACK');
+    } catch (_) {}
 
-    res.status(400).json({error:err.message});
+    console.error(
+      "❌ ERROR ANULANDO VENTA:",
+      err
+    );
 
-  }finally{
+    return res.status(400).json({
+      error: err.message
+    });
+
+  } finally {
+
     client.release();
+
   }
 
 };
@@ -294,21 +613,45 @@ exports.updateProduct = async (req, res) => {
       name,
       cost_price,
       price,
-      stock,
       image_url
     } = req.body;
 
-    console.log("UPDATE DATA:", {
-      id,
-      name,
-      cost_price,
-      price,
-      stock,
-      image_url
-    });
-
     const companyId = req.user.company_id;
 
+    // =============================
+    // 1️⃣ VALIDACIONES
+    // =============================
+    const costPrice = Number(cost_price);
+    const salePrice = Number(price);
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({
+        error: "Nombre del producto obligatorio"
+      });
+    }
+
+    if (
+      !Number.isFinite(costPrice) ||
+      costPrice < 0
+    ) {
+      return res.status(400).json({
+        error: "Costo inválido"
+      });
+    }
+
+    if (
+      !Number.isFinite(salePrice) ||
+      salePrice < 0
+    ) {
+      return res.status(400).json({
+        error: "Precio inválido"
+      });
+    }
+
+    // =============================
+    // 2️⃣ ACTUALIZAR PRODUCTO
+    // STOCK NO SE MODIFICA AQUÍ
+    // =============================
     const { rows } = await pool.query(
       `
       UPDATE products
@@ -316,17 +659,16 @@ exports.updateProduct = async (req, res) => {
         name = $1,
         cost_price = $2,
         price = $3,
-        stock = $4,
-        image_url = $5
-      WHERE id = $6 AND company_id = $7
+        image_url = $4
+      WHERE id = $5
+        AND company_id = $6
       RETURNING *
       `,
       [
-        name,
-        cost_price,
-        price,
-        stock,
-        image_url,
+        name.trim(),
+        costPrice,
+        salePrice,
+        image_url || null,
         id,
         companyId
       ]
@@ -338,15 +680,17 @@ exports.updateProduct = async (req, res) => {
       });
     }
 
-    res.json(rows[0]);
+    return res.json(rows[0]);
 
   } catch (err) {
 
-    console.error("🔥 UPDATE PRODUCT ERROR REAL:", err);
+    console.error(
+      "❌ ERROR ACTUALIZANDO PRODUCTO:",
+      err
+    );
 
-    res.status(500).json({
-      error: "Error actualizando producto",
-      details: err.message
+    return res.status(500).json({
+      error: "Error actualizando producto"
     });
 
   }
@@ -362,63 +706,184 @@ exports.addStock = async (req, res) => {
     await client.query('BEGIN');
 
     const { product_id, quantity, cost_price } = req.body;
+
     const staffId = req.user.id;
     const companyId = req.user.company_id;
 
-    /// 1. VALIDAR PRODUCTO
-    const product = await client.query(
-      `SELECT stock FROM products WHERE id=$1 AND company_id=$2`,
-      [product_id, companyId]
-    );
+    // =============================
+    // 1️⃣ VALIDAR DATOS
+    // =============================
+    const productId = Number.parseInt(product_id, 10);
+    const qty = Number.parseInt(quantity, 10);
+    const costPrice = Number(cost_price);
 
-    if(product.rows.length === 0){
-      throw new Error("Producto no existe");
+    if (
+      !Number.isInteger(productId) ||
+      productId <= 0
+    ) {
+      throw new Error("Producto inválido");
     }
 
-    /// 2. ACTUALIZAR STOCK
+    if (
+      !Number.isInteger(qty) ||
+      qty <= 0
+    ) {
+      throw new Error(
+        "La cantidad debe ser mayor a cero"
+      );
+    }
+
+    if (
+      !Number.isFinite(costPrice) ||
+      costPrice < 0
+    ) {
+      throw new Error(
+        "Costo de compra inválido"
+      );
+    }
+
+    // =============================
+    // 2️⃣ VALIDAR Y BLOQUEAR PRODUCTO
+    // =============================
+    const product = await client.query(
+      `
+      SELECT
+        id,
+        stock,
+        cost_price,
+        is_active
+      FROM products
+      WHERE id = $1
+        AND company_id = $2
+      FOR UPDATE
+      `,
+      [
+        productId,
+        companyId
+      ]
+    );
+
+    if (product.rows.length === 0) {
+      throw new Error(
+        "Producto no existe o no autorizado"
+      );
+    }
+
+    if (!product.rows[0].is_active) {
+      throw new Error(
+        "No se puede ingresar stock a un producto inactivo"
+      );
+    }
+
+    // =============================
+    // 3️⃣ ACTUALIZAR STOCK Y COSTO
+    // =============================
     await client.query(
       `
       UPDATE products
-      SET stock = stock + $1
-      WHERE id = $2 AND company_id=$3
+      SET
+        stock = stock + $1,
+        cost_price = $2
+      WHERE id = $3
+        AND company_id = $4
       `,
-      [quantity, product_id, companyId]
+      [
+        qty,
+        costPrice,
+        productId,
+        companyId
+      ]
     );
 
-    /// 3. REGISTRAR MOVIMIENTO
-    await client.query(
+    // =============================
+    // 4️⃣ REGISTRAR ENTRADA
+    // =============================
+    const movementResult = await client.query(
       `
       INSERT INTO stock_movements
-      (product_id, type, quantity, cost_price, staff_id, company_id, reference_type)
-      VALUES ($1, 'IN', $2, $3, $4, $5, 'purchase')
+      (
+        product_id,
+        type,
+        quantity,
+        cost_price,
+        staff_id,
+        company_id,
+        reference_type
+      )
+      VALUES
+      ($1,'IN',$2,$3,$4,$5,'purchase')
+      RETURNING id
       `,
-      [product_id, quantity, cost_price, staffId, companyId]
+      [
+        productId,
+        qty,
+        costPrice,
+        staffId,
+        companyId
+      ]
     );
 
-    /// 4. REGISTRAR EGRESO (IMPORTANTE 💰)
+    const movementId =
+      movementResult.rows[0].id;
+
+    // =============================
+    // 5️⃣ REGISTRAR EGRESO EN CAJA
+    // =============================
+    const totalCost = qty * costPrice;
+
     await client.query(
       `
       INSERT INTO cash_movements
-      (type, reference_type, reference_id, amount, staff_id, company_id)
-      VALUES ('expense', 'stock', $1, $2, $3, $4)
+      (
+        type,
+        reference_type,
+        reference_id,
+        amount,
+        staff_id,
+        company_id
+      )
+      VALUES
+      ('expense','stock',$1,$2,$3,$4)
       `,
-      [product_id, quantity * cost_price, staffId, companyId]
+      [
+        movementId,
+        totalCost,
+        staffId,
+        companyId
+      ]
     );
 
+    // =============================
+    // 6️⃣ TODO OK
+    // =============================
     await client.query('COMMIT');
 
-    res.json({ success: true });
+    return res.json({
+      success: true,
+      stock_added: qty,
+      cost_price: costPrice,
+      total_cost: totalCost
+    });
 
   } catch (err) {
 
-    await client.query('ROLLBACK');
+    try {
+      await client.query('ROLLBACK');
+    } catch (_) {}
 
-    res.status(400).json({
+    console.error(
+      "❌ ERROR AGREGANDO STOCK:",
+      err
+    );
+
+    return res.status(400).json({
       error: err.message
     });
 
   } finally {
+
     client.release();
+
   }
 
 };
