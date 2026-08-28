@@ -379,16 +379,29 @@ exports.cancelSale = async (req, res) => {
 
     await client.query('BEGIN');
 
-    const saleId = req.params.id;
+    const saleId = Number.parseInt(req.params.id, 10);
     const companyId = req.user.company_id;
     const staffId = req.user.id;
 
     // =============================
-    // 1️⃣ BUSCAR Y BLOQUEAR VENTA
+    // 1️⃣ VALIDAR ID
+    // =============================
+    if (
+      !Number.isInteger(saleId) ||
+      saleId <= 0
+    ) {
+      throw new Error("Venta inválida");
+    }
+
+    // =============================
+    // 2️⃣ BUSCAR Y BLOQUEAR VENTA
     // =============================
     const saleResult = await client.query(
       `
-      SELECT id, total, status
+      SELECT
+        id,
+        total,
+        status
       FROM sales
       WHERE id = $1
         AND company_id = $2
@@ -412,7 +425,7 @@ exports.cancelSale = async (req, res) => {
     const sale = saleResult.rows[0];
 
     // =============================
-    // 2️⃣ EVITAR DOBLE ANULACIÓN
+    // 3️⃣ EVITAR DOBLE ANULACIÓN
     // =============================
     if (sale.status === 'cancelled') {
 
@@ -424,23 +437,39 @@ exports.cancelSale = async (req, res) => {
     }
 
     // =============================
-    // 3️⃣ OBTENER ITEMS + COSTO
+    // 4️⃣ OBTENER PRODUCTOS AGRUPADOS
+    //
+    // IMPORTANTE:
+    // Si el mismo producto aparece varias veces
+    // en la venta, devolvemos el TOTAL una sola vez.
     // =============================
     const items = await client.query(
       `
       SELECT
         si.product_id,
-        si.quantity,
-        COALESCE(sm.cost_price, p.cost_price, 0)
-          AS cost_price
-      FROM sale_items si
 
-      LEFT JOIN stock_movements sm
-        ON sm.reference_type = 'sale'
-       AND sm.reference_id = si.sale_id
-       AND sm.product_id = si.product_id
-       AND sm.type = 'OUT'
-       AND sm.company_id = si.company_id
+        SUM(si.quantity) AS quantity,
+
+        COALESCE(
+          (
+            SELECT
+              SUM(sm.quantity * sm.cost_price)
+              /
+              NULLIF(SUM(sm.quantity), 0)
+
+            FROM stock_movements sm
+
+            WHERE sm.reference_type = 'sale'
+              AND sm.reference_id = si.sale_id
+              AND sm.product_id = si.product_id
+              AND sm.type = 'OUT'
+              AND sm.company_id = si.company_id
+          ),
+          p.cost_price,
+          0
+        ) AS cost_price
+
+      FROM sale_items si
 
       LEFT JOIN products p
         ON p.id = si.product_id
@@ -448,6 +477,12 @@ exports.cancelSale = async (req, res) => {
 
       WHERE si.sale_id = $1
         AND si.company_id = $2
+
+      GROUP BY
+        si.product_id,
+        si.sale_id,
+        si.company_id,
+        p.cost_price
       `,
       [
         saleId,
@@ -462,12 +497,30 @@ exports.cancelSale = async (req, res) => {
     }
 
     // =============================
-    // 4️⃣ DEVOLVER INVENTARIO
+    // 5️⃣ DEVOLVER INVENTARIO
     // =============================
     for (const item of items.rows) {
 
       const quantity = Number(item.quantity);
       const costPrice = Number(item.cost_price || 0);
+
+      if (
+        !Number.isFinite(quantity) ||
+        quantity <= 0
+      ) {
+        throw new Error(
+          `Cantidad inválida para producto ${item.product_id}`
+        );
+      }
+
+      if (
+        !Number.isFinite(costPrice) ||
+        costPrice < 0
+      ) {
+        throw new Error(
+          `Costo inválido para producto ${item.product_id}`
+        );
+      }
 
       const productUpdate = await client.query(
         `
@@ -475,7 +528,7 @@ exports.cancelSale = async (req, res) => {
         SET stock = stock + $1
         WHERE id = $2
           AND company_id = $3
-        RETURNING id
+        RETURNING stock
         `,
         [
           quantity,
@@ -491,7 +544,7 @@ exports.cancelSale = async (req, res) => {
       }
 
       // =============================
-      // 5️⃣ REGISTRAR DEVOLUCIÓN
+      // 6️⃣ REGISTRAR DEVOLUCIÓN
       // =============================
       await client.query(
         `
@@ -518,11 +571,10 @@ exports.cancelSale = async (req, res) => {
           saleId
         ]
       );
-
     }
 
     // =============================
-    // 6️⃣ ANULAR VENTA
+    // 7️⃣ MARCAR VENTA CANCELADA
     // =============================
     const cancelResult = await client.query(
       `
@@ -530,7 +582,7 @@ exports.cancelSale = async (req, res) => {
       SET status = 'cancelled'
       WHERE id = $1
         AND company_id = $2
-        AND status <> 'cancelled'
+        AND status IS DISTINCT FROM 'cancelled'
       RETURNING id
       `,
       [
@@ -546,8 +598,19 @@ exports.cancelSale = async (req, res) => {
     }
 
     // =============================
-    // 7️⃣ REVERSAR CAJA
+    // 8️⃣ REVERSAR INGRESO DE CAJA
     // =============================
+    const saleTotal = Number(sale.total);
+
+    if (
+      !Number.isFinite(saleTotal) ||
+      saleTotal < 0
+    ) {
+      throw new Error(
+        "Total de venta inválido"
+      );
+    }
+
     await client.query(
       `
       INSERT INTO cash_movements
@@ -564,14 +627,14 @@ exports.cancelSale = async (req, res) => {
       `,
       [
         saleId,
-        Number(sale.total),
+        saleTotal,
         staffId,
         companyId
       ]
     );
 
     // =============================
-    // 8️⃣ TODO OK
+    // 9️⃣ TODO OK
     // =============================
     await client.query('COMMIT');
 
@@ -600,7 +663,6 @@ exports.cancelSale = async (req, res) => {
     client.release();
 
   }
-
 };
 
 exports.updateProduct = async (req, res) => {
