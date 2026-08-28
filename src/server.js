@@ -17,6 +17,13 @@ console.log("🔥 FIREBASE CLIENT:", process.env.FIREBASE_CLIENT_EMAIL);
 
 const { pool } = require("./config/db");
 
+const dayjs = require("dayjs");
+const utc = require("dayjs/plugin/utc");
+const timezone = require("dayjs/plugin/timezone");
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
 const authRoutes = require("./routes/auth.cjs");
 const adminRoutes = require("./routes/admin.cjs");
 
@@ -84,56 +91,167 @@ app.listen(PORT, () => {
 });
 
 const cron = require("node-cron");
-const axios = require("axios");
-
-const API_URL = "https://hibrid-backend.onrender.com";
 
 // =============================
 // 🔔 RECORDATORIOS TRAINER
+// CONSULTA INTERNA - SIN HTTP
 // =============================
+
 cron.schedule("* * * * *", async () => {
 
   try {
 
-    console.log("⏰ CRON RECORDATORIOS EJECUTANDO...");
+    // =============================
+    // 1️⃣ BUSCAR SESIONES INTERNAMENTE
+    // =============================
+    const { rows: sessions } = await pool.query(
+      `
+      SELECT
+        ts.id,
 
-    // 1️⃣ Buscar sesiones que necesitan recordatorio
-    const response = await axios.get(
-      `${API_URL}/trainer/reminders`
+        TO_CHAR(
+          ts.session_date,
+          'YYYY-MM-DD'
+        ) AS session_date,
+
+        TO_CHAR(
+          ts.start_time,
+          'HH24:MI'
+        ) AS start_time,
+
+        ts.client_id,
+
+        u.fcm_token,
+        u.name,
+
+        COALESCE(
+          ts.reminder_minutes,
+          60
+        ) AS reminder_minutes,
+
+        COALESCE(
+          c.timezone,
+          'America/La_Paz'
+        ) AS timezone
+
+      FROM trainer_sessions ts
+
+      JOIN users u
+        ON u.id = ts.client_id
+
+      JOIN companies c
+        ON c.id = ts.company_id
+
+      WHERE ts.status = 'scheduled'
+
+        AND ts.reminder_sent = false
+
+        AND ts.client_id IS NOT NULL
+
+        AND u.is_active = true
+
+        AND c.is_active = true
+
+        AND c.subscription_status = 'active'
+
+        AND (
+          c.expiration_date IS NULL
+          OR c.expiration_date >= CURRENT_DATE
+        )
+      `
     );
 
-    const sessions = response.data;
-
-    if (!sessions || sessions.length === 0) {
-      console.log("📭 No hay recordatorios");
+    if (sessions.length === 0) {
       return;
     }
 
-    console.log(
-      "🔥 RECORDATORIOS ENCONTRADOS:",
-      sessions.length
-    );
-
-    // 2️⃣ Procesar uno por uno
+    // =============================
+    // 2️⃣ PROCESAR SESIONES
+    // =============================
     for (const s of sessions) {
-
-      if (!s.fcm_token) {
-        console.log(
-          "❌ Cliente sin FCM token:",
-          s.client_id
-        );
-        continue;
-      }
 
       try {
 
-        // 3️⃣ Enviar directamente con Firebase Admin
+        const minutes =
+          Number(s.reminder_minutes);
+
+        // 0 = cliente no quiere recordatorio
+        if (
+          !Number.isFinite(minutes) ||
+          minutes <= 0
+        ) {
+          continue;
+        }
+
+        const tz =
+          s.timezone ||
+          "America/La_Paz";
+
+        const nowTz =
+          dayjs().tz(tz);
+
+        const sessionDateTime =
+          dayjs.tz(
+            `${s.session_date} ${s.start_time}`,
+            tz
+          );
+
+        if (!sessionDateTime.isValid()) {
+
+          console.error(
+            "❌ FECHA SESIÓN INVÁLIDA:",
+            s.id
+          );
+
+          continue;
+        }
+
+        const reminderTime =
+          sessionDateTime.subtract(
+            minutes,
+            "minute"
+          );
+
+        // Aún no llegó la hora
+        if (
+          nowTz.valueOf() <
+          reminderTime.valueOf()
+        ) {
+          continue;
+        }
+
+        // La sesión ya comenzó/pasó
+        if (
+          nowTz.valueOf() >=
+          sessionDateTime.valueOf()
+        ) {
+          continue;
+        }
+
+        // =============================
+        // 3️⃣ CLIENTE SIN TOKEN
+        // =============================
+        if (!s.fcm_token) {
+
+          console.log(
+            "⚠️ Cliente sin FCM token:",
+            s.client_id
+          );
+
+          continue;
+        }
+
+        // =============================
+        // 4️⃣ ENVIAR PUSH
+        // =============================
         await admin.messaging().send({
+
           token: s.fcm_token,
 
           notification: {
             title: "Entrenamiento próximo 💪",
-            body: `Hola ${s.name}, tienes sesión pronto`,
+            body:
+              `Hola ${s.name}, tienes sesión pronto`,
           },
 
           data: {
@@ -145,7 +263,8 @@ cron.schedule("* * * * *", async () => {
             priority: "high",
             notification: {
               sound: "default",
-              channelId: "high_importance_channel",
+              channelId:
+                "high_importance_channel",
             },
           },
 
@@ -162,8 +281,9 @@ cron.schedule("* * * * *", async () => {
           },
         });
 
-        // 4️⃣ SOLO si Firebase respondió OK:
-        // marcar recordatorio como enviado
+        // =============================
+        // 5️⃣ MARCAR SOLO SI FIREBASE OK
+        // =============================
         await pool.query(
           `
           UPDATE trainer_sessions
@@ -175,30 +295,26 @@ cron.schedule("* * * * *", async () => {
         );
 
         console.log(
-          "✅ Recordatorio enviado y marcado:",
-          s.id,
-          s.name
+          "✅ Recordatorio trainer enviado:",
+          s.id
         );
 
       } catch (sendError) {
 
         console.error(
-          "❌ ERROR ENVIANDO RECORDATORIO:",
+          "❌ ERROR RECORDATORIO SESIÓN:",
           s.id,
           sendError.message
         );
-
       }
-
     }
 
-  } catch (error) {
+  } catch (err) {
 
     console.error(
-      "❌ ERROR CRON RECORDATORIOS:",
-      error.message
+      "❌ ERROR CRON TRAINER:",
+      err.message
     );
-
   }
 
 });
