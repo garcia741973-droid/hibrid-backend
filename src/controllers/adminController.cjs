@@ -5,8 +5,6 @@ const bcrypt = require("bcryptjs");
 /// CREAR CLIENTE
 exports.createClient = async (req, res) => {
 
-  console.log("🔥 CREATE CLIENT REAL EJECUTADO");
-
   try {
 
     const {
@@ -24,9 +22,6 @@ exports.createClient = async (req, res) => {
     const password = "123456";
 
     const hashedPassword = await bcrypt.hash(password,10);
-
-    console.log("PASSWORD:", password);
-    console.log("HASH GENERADO:", hashedPassword);
 
     const result = await pool.query(
       `
