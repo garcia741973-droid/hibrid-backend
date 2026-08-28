@@ -108,10 +108,11 @@ exports.getPlans = async (req,res)=>{
         duration_days,
         price,
         description
-      FROM plans
-      WHERE is_active = true
-      AND company_id = $1
-      ORDER BY duration_days ASC`,
+        FROM plans
+        WHERE is_active = true
+        AND company_id = $1
+        AND deleted_at IS NULL
+        ORDER BY duration_days ASC`,
       [req.user.company_id]
     );
 
@@ -140,6 +141,7 @@ exports.getAllPlans = async (req,res)=>{
     const {rows} = await pool.query(
       `SELECT * FROM plans
       WHERE company_id = $1
+      AND deleted_at IS NULL
       ORDER BY id DESC`,
       [req.user.company_id]
     );
@@ -190,6 +192,7 @@ exports.togglePlan = async (req, res) => {
       SET is_active = NOT is_active
       WHERE id = $1
         AND company_id = $2
+        AND deleted_at IS NULL
       RETURNING *
       `,
       [
@@ -306,9 +309,10 @@ exports.updatePlan = async (req, res) => {
         duration_days = $2,
         price = $3,
         description = $4
-      WHERE id = $5
-        AND company_id = $6
-      RETURNING *
+        WHERE id = $5
+          AND company_id = $6
+          AND deleted_at IS NULL
+        RETURNING *
       `,
       [
         cleanName,
@@ -339,6 +343,84 @@ exports.updatePlan = async (req, res) => {
 
     return res.status(500).json({
       error: "Error actualizando plan"
+    });
+  }
+};
+
+// =============================
+// ELIMINAR PLAN
+// SOFT DELETE
+// =============================
+
+exports.deletePlan = async (req, res) => {
+
+  try {
+
+    const id = Number.parseInt(
+      req.params.id,
+      10
+    );
+
+    const companyId =
+      req.user.company_id;
+
+    // =============================
+    // VALIDAR ID
+    // =============================
+
+    if (
+      !Number.isInteger(id) ||
+      id <= 0
+    ) {
+      return res.status(400).json({
+        error: "Plan inválido"
+      });
+    }
+
+    // =============================
+    // SOFT DELETE
+    // =============================
+
+    const { rows } = await pool.query(
+      `
+      UPDATE plans
+      SET
+        is_active = false,
+        deleted_at = NOW()
+      WHERE id = $1
+        AND company_id = $2
+        AND deleted_at IS NULL
+      RETURNING
+        id,
+        name
+      `,
+      [
+        id,
+        companyId
+      ]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({
+        error: "Plan no encontrado"
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: "Plan eliminado",
+      plan: rows[0]
+    });
+
+  } catch (err) {
+
+    console.error(
+      "❌ ERROR ELIMINANDO PLAN:",
+      err
+    );
+
+    return res.status(500).json({
+      error: "Error eliminando plan"
     });
   }
 };

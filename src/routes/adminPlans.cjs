@@ -44,4 +44,15 @@ requireAuth,
 requireRole(["admin","superadmin"]),
 controller.updatePlan);
 
+// =============================
+// ELIMINAR PLAN
+// =============================
+
+router.delete(
+  '/plans/:id',
+  requireAuth,
+  requireRole(["admin","superadmin"]),
+  controller.deletePlan
+);
+
 module.exports = router;
