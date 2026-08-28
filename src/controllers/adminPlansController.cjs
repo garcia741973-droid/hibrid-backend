@@ -2,38 +2,97 @@ const { pool } = require('../config/db');
 
 
 // Crear plan (ADMIN)
-exports.createPlan = async (req,res)=>{
+exports.createPlan = async (req, res) => {
 
-  try{
+  try {
 
-    const {name,duration_days,price,description} = req.body;
+    const {
+      name,
+      duration_days,
+      price,
+      description
+    } = req.body;
 
-    const {rows} = await pool.query(
-      `INSERT INTO plans
-      (name,duration_days,price,description,company_id)
-      VALUES ($1,$2,$3,$4,$5)
-      RETURNING *`,
-      [
+    const companyId = req.user.company_id;
+
+    // =============================
+    // VALIDACIONES
+    // =============================
+    const cleanName =
+      typeof name === "string"
+        ? name.trim()
+        : "";
+
+    const duration =
+      Number(duration_days);
+
+    const planPrice =
+      Number(price);
+
+    if (!cleanName) {
+      return res.status(400).json({
+        error: "Nombre del plan obligatorio"
+      });
+    }
+
+    if (
+      !Number.isInteger(duration) ||
+      duration <= 0
+    ) {
+      return res.status(400).json({
+        error: "La duración debe ser un número entero mayor a cero"
+      });
+    }
+
+    if (
+      !Number.isFinite(planPrice) ||
+      planPrice < 0
+    ) {
+      return res.status(400).json({
+        error: "Precio inválido"
+      });
+    }
+
+    // =============================
+    // CREAR PLAN
+    // =============================
+    const { rows } = await pool.query(
+      `
+      INSERT INTO plans
+      (
         name,
         duration_days,
         price,
         description,
-        req.user.company_id // 🔥 CLAVE
+        company_id
+      )
+      VALUES ($1,$2,$3,$4,$5)
+      RETURNING *
+      `,
+      [
+        cleanName,
+        duration,
+        planPrice,
+        description?.toString().trim() || "",
+        companyId
       ]
     );
 
-    res.json(rows[0]);
+    return res.status(201).json(
+      rows[0]
+    );
 
-  }catch(err){
+  } catch (err) {
 
-    console.error(err);
+    console.error(
+      "❌ ERROR CREANDO PLAN:",
+      err
+    );
 
-    res.status(500).json({
-      error:"Error creando plan"
+    return res.status(500).json({
+      error: "Error creando plan"
     });
-
   }
-
 };
 
 
@@ -103,77 +162,183 @@ exports.getAllPlans = async (req,res)=>{
 // =============================
 // ACTIVAR / DESACTIVAR PLAN
 // =============================
-exports.togglePlan = async (req,res)=>{
+exports.togglePlan = async (req, res) => {
 
-  try{
+  try {
 
-    const {id} = req.params;
+    const id =
+      Number.parseInt(
+        req.params.id,
+        10
+      );
 
-    const {rows} = await pool.query(
+    const companyId =
+      req.user.company_id;
+
+    if (
+      !Number.isInteger(id) ||
+      id <= 0
+    ) {
+      return res.status(400).json({
+        error: "Plan inválido"
+      });
+    }
+
+    const { rows } = await pool.query(
       `
       UPDATE plans
       SET is_active = NOT is_active
-      WHERE id=$1 AND company_id=$2
+      WHERE id = $1
+        AND company_id = $2
       RETURNING *
       `,
-      [id, req.user.company_id]
+      [
+        id,
+        companyId
+      ]
     );
 
-    res.json(rows[0]);
+    if (rows.length === 0) {
+      return res.status(404).json({
+        error: "Plan no encontrado"
+      });
+    }
 
-  }catch(err){
+    return res.json(
+      rows[0]
+    );
 
-    console.error(err);
+  } catch (err) {
 
-    res.status(500).json({
-      error:"Error actualizando plan"
+    console.error(
+      "❌ ERROR CAMBIANDO ESTADO PLAN:",
+      err
+    );
+
+    return res.status(500).json({
+      error: "Error actualizando plan"
     });
-
   }
-
 };
 
 
 // =============================
 // EDITAR PLAN
 // =============================
-exports.updatePlan = async (req,res)=>{
+exports.updatePlan = async (req, res) => {
 
-  try{
+  try {
 
-    const {id} = req.params;
-    const {name,duration_days,price,description} = req.body;
+    const id =
+      Number.parseInt(
+        req.params.id,
+        10
+      );
 
-    const {rows} = await pool.query(
+    const {
+      name,
+      duration_days,
+      price,
+      description
+    } = req.body;
+
+    const companyId =
+      req.user.company_id;
+
+    // =============================
+    // VALIDAR ID
+    // =============================
+    if (
+      !Number.isInteger(id) ||
+      id <= 0
+    ) {
+      return res.status(400).json({
+        error: "Plan inválido"
+      });
+    }
+
+    // =============================
+    // VALIDAR DATOS
+    // =============================
+    const cleanName =
+      typeof name === "string"
+        ? name.trim()
+        : "";
+
+    const duration =
+      Number(duration_days);
+
+    const planPrice =
+      Number(price);
+
+    if (!cleanName) {
+      return res.status(400).json({
+        error: "Nombre del plan obligatorio"
+      });
+    }
+
+    if (
+      !Number.isInteger(duration) ||
+      duration <= 0
+    ) {
+      return res.status(400).json({
+        error: "La duración debe ser un número entero mayor a cero"
+      });
+    }
+
+    if (
+      !Number.isFinite(planPrice) ||
+      planPrice < 0
+    ) {
+      return res.status(400).json({
+        error: "Precio inválido"
+      });
+    }
+
+    // =============================
+    // ACTUALIZAR
+    // =============================
+    const { rows } = await pool.query(
       `
       UPDATE plans
-      SET name=$1,
-          duration_days=$2,
-          price=$3,
-          description=$4
-      WHERE id=$5 AND company_id=$6
+      SET
+        name = $1,
+        duration_days = $2,
+        price = $3,
+        description = $4
+      WHERE id = $5
+        AND company_id = $6
       RETURNING *
       `,
       [
-        name,
-        duration_days,
-        price,
-        description,
+        cleanName,
+        duration,
+        planPrice,
+        description?.toString().trim() || "",
         id,
-        req.user.company_id
+        companyId
       ]
     );
 
-    res.json(rows[0]);
+    if (rows.length === 0) {
+      return res.status(404).json({
+        error: "Plan no encontrado"
+      });
+    }
 
-  }catch(err){
+    return res.json(
+      rows[0]
+    );
 
-    console.error(err);
+  } catch (err) {
 
-    res.status(500).json({
-      error:"Error actualizando plan"
+    console.error(
+      "❌ ERROR ACTUALIZANDO PLAN:",
+      err
+    );
+
+    return res.status(500).json({
+      error: "Error actualizando plan"
     });
-
   }
-
 };
