@@ -134,35 +134,64 @@ exports.createProduct = async (req, res) => {
     // =============================
     if (initialStock > 0) {
 
-      await client.query(
-        `
-        INSERT INTO stock_movements
-        (
-          product_id,
-          type,
-          quantity,
-          cost_price,
-          staff_id,
-          company_id,
-          reference_type,
-          reference_id
-        )
-        VALUES
-        ($1,'IN',$2,$3,$4,$5,'initial_stock',$1)
-        `,
-        [
-          product.id,
-          initialStock,
-          costPrice,
-          staffId,
-          companyId
-        ]
-      );
-    }
+    // =============================
+    // 3️⃣ REGISTRAR COMPRA INICIAL
+    // =============================
+    const movementResult = await client.query(
+      `
+      INSERT INTO stock_movements
+      (
+        product_id,
+        type,
+        quantity,
+        cost_price,
+        staff_id,
+        company_id,
+        reference_type
+      )
+      VALUES
+      ($1,'IN',$2,$3,$4,$5,'purchase')
+      RETURNING id
+      `,
+      [
+        product.id,
+        initialStock,
+        costPrice,
+        staffId,
+        companyId
+      ]
+    );
 
-    // IMPORTANTE:
-    // stock inicial NO genera cash_movements.
-    // Es inventario existente al empezar a usar HIBRID.
+    const movementId = movementResult.rows[0].id;
+
+    // =============================
+    // 4️⃣ REGISTRAR EGRESO EN CAJA
+    // =============================
+    const totalCost = initialStock * costPrice;
+
+    await client.query(
+      `
+      INSERT INTO cash_movements
+      (
+        type,
+        reference_type,
+        reference_id,
+        amount,
+        staff_id,
+        company_id
+      )
+      VALUES
+      ('expense','stock',$1,$2,$3,$4)
+      `,
+      [
+        movementId,
+        totalCost,
+        staffId,
+        companyId
+      ]
+    );
+  }
+
 
     await client.query('COMMIT');
 
