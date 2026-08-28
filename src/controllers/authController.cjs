@@ -44,7 +44,8 @@ exports.login = async (req,res)=>{
     c.id as company_id_real,
     c.type as company_type,
     c.name as company_name,
-    c.logo_url as company_logo
+    c.logo_url as company_logo,
+    c.is_active as company_is_active
     FROM users u
     JOIN companies c ON u.company_id = c.id
     WHERE u.email = $1
@@ -53,16 +54,40 @@ exports.login = async (req,res)=>{
   );
 
   const user = result.rows[0];
-  console.log("LOGIN USER:", user);
 
-  if(!user){
-   return res.status(400).json({error:"Usuario no existe"});
+  if (!user) {
+    return res.status(400).json({
+      error: "Usuario no existe"
+    });
   }
 
-  const validPassword = await bcrypt.compare(password,user.password);
+  const validPassword = await bcrypt.compare(
+    password,
+    user.password
+  );
 
-  if(!validPassword){
-   return res.status(400).json({error:"Password incorrecto"});
+  if (!validPassword) {
+    return res.status(400).json({
+      error: "Password incorrecto"
+    });
+  }
+
+  // =============================
+  // 🔒 USUARIO DESACTIVADO
+  // =============================
+  if (!user.is_active) {
+    return res.status(403).json({
+      error: "Usuario desactivado"
+    });
+  }
+
+  // =============================
+  // 🔒 EMPRESA DESACTIVADA
+  // =============================
+  if (!user.company_is_active) {
+    return res.status(403).json({
+      error: "Empresa desactivada"
+    });
   }
 
   const token = jwt.sign(
@@ -76,14 +101,12 @@ exports.login = async (req,res)=>{
   { expiresIn: "7d" }
   );
 
-  console.log("🔥 GENERANDO FIREBASE TOKEN PARA:", user.id);
 
   // 🔥 GENERAR TOKEN FIREBASE
   const firebaseToken = await admin.auth().createCustomToken(
     user.id.toString()
   );
 
-  console.log("🔥 FIREBASE TOKEN:", firebaseToken);
 
   res.json({
     token,
