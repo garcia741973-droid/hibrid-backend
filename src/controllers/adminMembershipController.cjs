@@ -138,7 +138,12 @@ exports.approveMembership = async (req, res) => {
       SET
         membership_start = $1,
         membership_end = $2,
-        membership_status = 'active',
+        membership_status =
+          CASE
+            WHEN $2::date < CURRENT_DATE THEN 'expired'
+            WHEN $1::date > CURRENT_DATE THEN 'inactive'
+            ELSE 'active'
+          END,
         updated_at = NOW()
       WHERE id = $3
         AND company_id = $4
