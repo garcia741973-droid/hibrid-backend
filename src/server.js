@@ -319,6 +319,318 @@ cron.schedule("* * * * *", async () => {
 
 });
 
+// =============================
+// 🔔 RECORDATORIOS VENCIMIENTO MEMBRESÍA
+// GYM - CONSULTA INTERNA
+// =============================
+
+cron.schedule("0 * * * *", async () => {
+
+  try {
+
+    // =============================
+    // 1️⃣ BUSCAR CLIENTES PRÓXIMOS A VENCER
+    // =============================
+
+    const { rows: clients } = await pool.query(
+      `
+      SELECT
+        u.id AS user_id,
+        u.company_id,
+        u.name,
+        u.fcm_token,
+
+        TO_CHAR(
+          u.membership_end,
+          'YYYY-MM-DD'
+        ) AS membership_end,
+
+        COALESCE(
+          c.timezone,
+          'America/La_Paz'
+        ) AS timezone
+
+      FROM users u
+
+      JOIN companies c
+        ON c.id = u.company_id
+
+      WHERE u.role = 'client'
+
+        AND u.is_active = true
+
+        AND u.membership_status = 'active'
+
+        AND u.membership_end IS NOT NULL
+
+        AND c.type = 'gym'
+
+        AND c.is_active = true
+
+        AND c.subscription_status = 'active'
+
+        AND (
+          c.expiration_date IS NULL
+          OR c.expiration_date >= CURRENT_DATE
+        )
+
+        AND u.membership_end
+          BETWEEN CURRENT_DATE - 1
+          AND CURRENT_DATE + 6
+      `
+    );
+
+    // =============================
+    // 2️⃣ PROCESAR CLIENTES
+    // =============================
+
+    for (const client of clients) {
+
+      let logId = null;
+
+      try {
+
+        const tz =
+          client.timezone ||
+          "America/La_Paz";
+
+        const nowTz =
+          dayjs().tz(tz);
+
+        // No mandar avisos de madrugada.
+        // Si Render estuvo apagado a las 9,
+        // puede enviarlo más tarde ese mismo día.
+        if (
+          nowTz.hour() < 9 ||
+          nowTz.hour() > 20
+        ) {
+          continue;
+        }
+
+        const today =
+          nowTz.startOf("day");
+
+        const membershipEnd =
+          dayjs.tz(
+            client.membership_end,
+            "YYYY-MM-DD",
+            tz
+          ).startOf("day");
+
+        if (!membershipEnd.isValid()) {
+          continue;
+        }
+
+        const daysLeft =
+          membershipEnd.diff(
+            today,
+            "day"
+          );
+
+        // =============================
+        // SOLO 5, 2 Y 0 DÍAS
+        // =============================
+
+        if (
+          daysLeft !== 5 &&
+          daysLeft !== 2 &&
+          daysLeft !== 0
+        ) {
+          continue;
+        }
+
+        // =============================
+        // CLIENTE SIN TOKEN
+        // =============================
+
+        if (!client.fcm_token) {
+          continue;
+        }
+
+        // =============================
+        // 3️⃣ RECLAMAR RECORDATORIO
+        // EVITA DUPLICADOS
+        // =============================
+
+        const { rows: logRows } =
+          await pool.query(
+            `
+            INSERT INTO membership_reminder_logs
+            (
+              user_id,
+              company_id,
+              membership_end,
+              reminder_days
+            )
+            VALUES ($1,$2,$3,$4)
+
+            ON CONFLICT
+            (
+              user_id,
+              company_id,
+              membership_end,
+              reminder_days
+            )
+            DO NOTHING
+
+            RETURNING id
+            `,
+            [
+              client.user_id,
+              client.company_id,
+              client.membership_end,
+              daysLeft
+            ]
+          );
+
+        // Otro proceso ya lo envió
+        // o ya fue enviado anteriormente.
+        if (logRows.length === 0) {
+          continue;
+        }
+
+        logId = logRows[0].id;
+
+        // =============================
+        // 4️⃣ TEXTO DEL RECORDATORIO
+        // =============================
+
+        let title;
+        let body;
+
+        if (daysLeft === 5) {
+
+          title =
+            "Tu membresía vence pronto ⏳";
+
+          body =
+            `Hola ${client.name}, tu membresía vence en 5 días.`;
+
+        } else if (daysLeft === 2) {
+
+          title =
+            "Tu membresía está por vencer 🔔";
+
+          body =
+            `Hola ${client.name}, quedan 2 días para renovar tu membresía.`;
+
+        } else {
+
+          title =
+            "Tu membresía vence hoy";
+
+          body =
+            `Hola ${client.name}, tu membresía vence hoy. Puedes renovarla desde HIBRID.`;
+
+        }
+
+        // =============================
+        // 5️⃣ ENVIAR PUSH
+        // =============================
+
+        await admin.messaging().send({
+
+          token: client.fcm_token,
+
+          notification: {
+            title,
+            body,
+          },
+
+          data: {
+            type:
+              "membership_expiry_reminder",
+
+            membershipEnd:
+              client.membership_end,
+
+            reminderDays:
+              daysLeft.toString(),
+          },
+
+          android: {
+
+            priority: "high",
+
+            notification: {
+
+              sound: "default",
+
+              channelId:
+                "high_importance_channel",
+
+            },
+
+          },
+
+          apns: {
+
+            headers: {
+              "apns-priority": "10",
+            },
+
+            payload: {
+
+              aps: {
+                sound: "default",
+                badge: 1,
+              },
+
+            },
+
+          },
+
+        });
+
+        console.log(
+          "✅ Recordatorio membresía enviado:",
+          client.user_id,
+          daysLeft
+        );
+
+      } catch (sendError) {
+
+        // =============================
+        // SI FIREBASE FALLÓ,
+        // LIBERAR EL REGISTRO
+        // PARA PODER REINTENTAR
+        // =============================
+
+        if (logId) {
+
+          try {
+
+            await pool.query(
+              `
+              DELETE FROM membership_reminder_logs
+              WHERE id = $1
+              `,
+              [logId]
+            );
+
+          } catch (_) {}
+
+        }
+
+        console.error(
+          "❌ ERROR RECORDATORIO MEMBRESÍA:",
+          client.user_id,
+          sendError.message
+        );
+      }
+    }
+
+  } catch (err) {
+
+    console.error(
+      "❌ ERROR CRON MEMBRESÍAS:",
+      err.message
+    );
+
+  }
+
+});
+
 const membershipRoutes = require('./routes/membership.cjs');
 
 app.use('/', membershipRoutes);
