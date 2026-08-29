@@ -324,7 +324,7 @@ cron.schedule("* * * * *", async () => {
 // GYM - CONSULTA INTERNA
 // =============================
 
-cron.schedule("0 * * * *", async () => {
+cron.schedule("* * * * *", async () => {
 
   try {
 
