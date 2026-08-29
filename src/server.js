@@ -97,7 +97,7 @@ const cron = require("node-cron");
 // CONSULTA INTERNA - SIN HTTP
 // =============================
 
-cron.schedule("* * * * *", async () => {
+cron.schedule("0 * * * *", async () => {
 
   try {
 
@@ -423,7 +423,7 @@ cron.schedule("* * * * *", async () => {
         // puede enviarlo más tarde ese mismo día.
         if (
           nowTz.hour() < 9 ||
-          nowTz.hour() > 23
+          nowTz.hour() > 20
         ) {
           continue;
         }
