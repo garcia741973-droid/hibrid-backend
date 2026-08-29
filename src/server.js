@@ -371,12 +371,33 @@ cron.schedule("* * * * *", async () => {
 
         AND (
           c.expiration_date IS NULL
-          OR c.expiration_date >= CURRENT_DATE
+          OR c.expiration_date >=
+            (
+              CURRENT_TIMESTAMP
+              AT TIME ZONE COALESCE(
+                c.timezone,
+                'America/La_Paz'
+              )
+            )::date
         )
 
         AND u.membership_end
-          BETWEEN CURRENT_DATE - 1
-          AND CURRENT_DATE + 6
+          BETWEEN
+            (
+              CURRENT_TIMESTAMP
+              AT TIME ZONE COALESCE(
+                c.timezone,
+                'America/La_Paz'
+              )
+            )::date
+          AND
+            (
+              CURRENT_TIMESTAMP
+              AT TIME ZONE COALESCE(
+                c.timezone,
+                'America/La_Paz'
+              )
+            )::date + 5
       `
     );
 
@@ -402,7 +423,7 @@ cron.schedule("* * * * *", async () => {
         // puede enviarlo más tarde ese mismo día.
         if (
           nowTz.hour() < 9 ||
-          nowTz.hour() > 20
+          nowTz.hour() > 23
         ) {
           continue;
         }
