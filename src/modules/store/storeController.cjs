@@ -1203,243 +1203,537 @@ exports.createSale = async (req, res) => {
 
 exports.cancelSale = async (req, res) => {
 
-  const client = await pool.connect();
+  const client =
+    await pool.connect();
+
 
   try {
 
-    await client.query('BEGIN');
+    await client.query(
+      'BEGIN'
+    );
 
-    const saleId = Number.parseInt(req.params.id, 10);
-    const companyId = req.user.company_id;
-    const staffId = req.user.id;
 
-    // =============================
-    // 1️⃣ VALIDAR ID
-    // =============================
+    const saleId =
+      Number.parseInt(
+        req.params.id,
+        10
+      );
+
+
+    const companyId =
+      req.user.company_id;
+
+
+    const staffId =
+      req.user.id;
+
+
     if (
       !Number.isInteger(saleId) ||
       saleId <= 0
     ) {
-      throw new Error("Venta inválida");
-    }
 
-    // =============================
-    // 2️⃣ BUSCAR Y BLOQUEAR VENTA
-    // =============================
-    const saleResult = await client.query(
-      `
-      SELECT
-        id,
-        total,
-        status
-      FROM sales
-      WHERE id = $1
-        AND company_id = $2
-      FOR UPDATE
-      `,
-      [
-        saleId,
-        companyId
-      ]
-    );
-
-    if (saleResult.rows.length === 0) {
-
-      await client.query('ROLLBACK');
-
-      return res.status(404).json({
-        error: "Venta no encontrada o no autorizada"
-      });
-    }
-
-    const sale = saleResult.rows[0];
-
-    // =============================
-    // 3️⃣ EVITAR DOBLE ANULACIÓN
-    // =============================
-    if (sale.status === 'cancelled') {
-
-      await client.query('ROLLBACK');
-
-      return res.status(400).json({
-        error: "La venta ya fue anulada"
-      });
-    }
-
-    // =============================
-    // 4️⃣ OBTENER PRODUCTOS AGRUPADOS
-    //
-    // IMPORTANTE:
-    // Si el mismo producto aparece varias veces
-    // en la venta, devolvemos el TOTAL una sola vez.
-    // =============================
-    const items = await client.query(
-      `
-      SELECT
-        si.product_id,
-
-        SUM(si.quantity) AS quantity,
-
-        COALESCE(
-          (
-            SELECT
-              SUM(sm.quantity * sm.cost_price)
-              /
-              NULLIF(SUM(sm.quantity), 0)
-
-            FROM stock_movements sm
-
-            WHERE sm.reference_type = 'sale'
-              AND sm.reference_id = si.sale_id
-              AND sm.product_id = si.product_id
-              AND sm.type = 'OUT'
-              AND sm.company_id = si.company_id
-          ),
-          p.cost_price,
-          0
-        ) AS cost_price
-
-      FROM sale_items si
-
-      LEFT JOIN products p
-        ON p.id = si.product_id
-       AND p.company_id = si.company_id
-
-      WHERE si.sale_id = $1
-        AND si.company_id = $2
-
-      GROUP BY
-        si.product_id,
-        si.sale_id,
-        si.company_id,
-        p.cost_price
-      `,
-      [
-        saleId,
-        companyId
-      ]
-    );
-
-    if (items.rows.length === 0) {
       throw new Error(
-        "La venta no contiene productos"
+        'Venta inválida'
       );
     }
 
-    // =============================
-    // 5️⃣ DEVOLVER INVENTARIO
-    // =============================
-    for (const item of items.rows) {
 
-      const quantity = Number(item.quantity);
-      const costPrice = Number(item.cost_price || 0);
+    // =============================================
+    // 1. BUSCAR Y BLOQUEAR VENTA
+    // =============================================
 
-      if (
-        !Number.isFinite(quantity) ||
-        quantity <= 0
-      ) {
-        throw new Error(
-          `Cantidad inválida para producto ${item.product_id}`
-        );
-      }
-
-      if (
-        !Number.isFinite(costPrice) ||
-        costPrice < 0
-      ) {
-        throw new Error(
-          `Costo inválido para producto ${item.product_id}`
-        );
-      }
-
-      const productUpdate = await client.query(
+    const saleResult =
+      await client.query(
         `
-        UPDATE products
-        SET stock = stock + $1
-        WHERE id = $2
-          AND company_id = $3
-        RETURNING stock
+        SELECT
+          id,
+          total,
+          status
+        FROM sales
+        WHERE id = $1
+          AND company_id = $2
+        FOR UPDATE
         `,
         [
-          quantity,
-          item.product_id,
+          saleId,
           companyId
         ]
       );
 
-      if (productUpdate.rows.length === 0) {
+
+    if (
+      saleResult.rows.length === 0
+    ) {
+
+      await client.query(
+        'ROLLBACK'
+      );
+
+
+      return res
+        .status(404)
+        .json({
+          error:
+            'Venta no encontrada o no autorizada'
+        });
+    }
+
+
+    const sale =
+      saleResult.rows[0];
+
+
+    // =============================================
+    // 2. EVITAR DOBLE ANULACIÓN
+    // =============================================
+
+    if (
+      sale.status ===
+      'cancelled'
+    ) {
+
+      await client.query(
+        'ROLLBACK'
+      );
+
+
+      return res
+        .status(400)
+        .json({
+          error:
+            'La venta ya fue anulada'
+        });
+    }
+
+
+    // =============================================
+    // 3. OBTENER ITEMS
+    // OWNED + PARTNER
+    // =============================================
+
+    const items =
+      await client.query(
+        `
+        SELECT
+
+          si.id AS sale_item_id,
+
+          si.product_id,
+
+          si.quantity,
+
+          p.name,
+
+          COALESCE(
+            p.inventory_source,
+            'owned'
+          ) AS inventory_source,
+
+          p.partner_catalog_id,
+
+          COALESCE(
+            sm.cost_price,
+            p.cost_price,
+            0
+          ) AS cost_price,
+
+          psa.id AS allocation_id,
+
+          psa.status AS allocation_status,
+
+          psa.settlement_unit_price
+
+
+        FROM sale_items si
+
+
+        JOIN products p
+          ON p.id = si.product_id
+         AND p.company_id = si.company_id
+
+
+        LEFT JOIN stock_movements sm
+          ON sm.reference_type = 'sale'
+         AND sm.reference_id = si.sale_id
+         AND sm.product_id = si.product_id
+         AND sm.type = 'OUT'
+         AND sm.company_id = si.company_id
+
+
+        LEFT JOIN partner_sale_allocations psa
+          ON psa.sale_item_id = si.id
+         AND psa.sale_id = si.sale_id
+         AND psa.company_id = si.company_id
+
+
+        WHERE si.sale_id = $1
+          AND si.company_id = $2
+
+        ORDER BY si.id
+        `,
+        [
+          saleId,
+          companyId
+        ]
+      );
+
+
+    if (
+      items.rows.length === 0
+    ) {
+
+      throw new Error(
+        'La venta no contiene productos'
+      );
+    }
+
+
+    // =============================================
+    // 4. VALIDAR QUE NO HAYA PARTNERS YA LIQUIDADOS
+    // =============================================
+
+    for (
+      const item of items.rows
+    ) {
+
+      if (
+        item.inventory_source ===
+          'partner' &&
+        item.allocation_status ===
+          'settled'
+      ) {
+
         throw new Error(
-          `Producto ${item.product_id} no encontrado`
+          `No se puede anular automáticamente: ` +
+          `${item.name} ya fue liquidado a HIBRID/MLM`
+        );
+      }
+    }
+
+
+    // =============================================
+    // 5. DEVOLVER INVENTARIO
+    // =============================================
+
+    for (
+      const item of items.rows
+    ) {
+
+      const quantity =
+        Number(
+          item.quantity
+        );
+
+
+      if (
+        !Number.isInteger(quantity) ||
+        quantity <= 0
+      ) {
+
+        throw new Error(
+          `Cantidad inválida en venta: ${item.name}`
         );
       }
 
-      // =============================
-      // 6️⃣ REGISTRAR DEVOLUCIÓN
-      // =============================
+
+      // ===========================================
+      // PRODUCTO PROPIO
+      // ===========================================
+
+      if (
+        item.inventory_source ===
+        'owned'
+      ) {
+
+        const costPrice =
+          Number(
+            item.cost_price || 0
+          );
+
+
+        const productUpdate =
+          await client.query(
+            `
+            UPDATE products
+            SET stock =
+              stock + $1
+            WHERE id = $2
+              AND company_id = $3
+            RETURNING id, stock
+            `,
+            [
+              quantity,
+              item.product_id,
+              companyId
+            ]
+          );
+
+
+        if (
+          productUpdate.rows.length ===
+          0
+        ) {
+
+          throw new Error(
+            `Producto ${item.product_id} no encontrado`
+          );
+        }
+
+
+        // =========================================
+        // MOVIMIENTO LOCAL DE DEVOLUCIÓN
+        // =========================================
+
+        await client.query(
+          `
+          INSERT INTO stock_movements
+          (
+            product_id,
+            type,
+            quantity,
+            cost_price,
+            staff_id,
+            company_id,
+            reference_type,
+            reference_id
+          )
+          VALUES
+          (
+            $1,
+            'IN',
+            $2,
+            $3,
+            $4,
+            $5,
+            'sale_cancel',
+            $6
+          )
+          `,
+          [
+            item.product_id,
+            quantity,
+            costPrice,
+            staffId,
+            companyId,
+            saleId
+          ]
+        );
+
+
+        continue;
+      }
+
+
+      // ===========================================
+      // PRODUCTO PARTNER
+      // ===========================================
+
+      if (
+        item.inventory_source ===
+        'partner'
+      ) {
+
+        const partnerCatalogId =
+          Number.parseInt(
+            item.partner_catalog_id,
+            10
+          );
+
+
+        if (
+          !Number.isInteger(
+            partnerCatalogId
+          ) ||
+          partnerCatalogId <= 0
+        ) {
+
+          throw new Error(
+            `Producto Partner sin catálogo: ${item.name}`
+          );
+        }
+
+
+        if (
+          !item.allocation_id
+        ) {
+
+          throw new Error(
+            `Venta Partner sin distribución económica: ${item.name}`
+          );
+        }
+
+
+        if (
+          item.allocation_status ===
+          'cancelled'
+        ) {
+
+          throw new Error(
+            `Distribución Partner ya anulada: ${item.name}`
+          );
+        }
+
+
+        const settlementUnitPrice =
+          Number(
+            item.settlement_unit_price ||
+            0
+          );
+
+
+        // =========================================
+        // DEVOLVER AL STOCK CENTRAL
+        // products.stock NO SE TOCA
+        // =========================================
+
+        const centralUpdate =
+          await client.query(
+            `
+            UPDATE partner_catalog_products
+            SET
+              stock =
+                stock + $1,
+              updated_at =
+                NOW()
+            WHERE id = $2
+            RETURNING id, stock
+            `,
+            [
+              quantity,
+              partnerCatalogId
+            ]
+          );
+
+
+        if (
+          centralUpdate.rows.length ===
+          0
+        ) {
+
+          throw new Error(
+            `Producto central no encontrado: ${item.name}`
+          );
+        }
+
+
+        // =========================================
+        // MOVIMIENTO DE STOCK CENTRAL
+        // =========================================
+
+        await client.query(
+          `
+          INSERT INTO partner_stock_movements
+          (
+            partner_catalog_id,
+            type,
+            quantity,
+            settlement_price,
+            company_id,
+            reference_type,
+            reference_id
+          )
+          VALUES
+          (
+            $1,
+            'IN',
+            $2,
+            $3,
+            $4,
+            'sale_cancel',
+            $5
+          )
+          `,
+          [
+            partnerCatalogId,
+            quantity,
+            settlementUnitPrice,
+            companyId,
+            saleId
+          ]
+        );
+
+
+        // =========================================
+        // ANULAR DISTRIBUCIÓN ECONÓMICA
+        // =========================================
+
+        const allocationUpdate =
+          await client.query(
+            `
+            UPDATE partner_sale_allocations
+            SET
+              status = 'cancelled'
+            WHERE id = $1
+              AND company_id = $2
+              AND status = 'pending'
+            RETURNING id
+            `,
+            [
+              item.allocation_id,
+              companyId
+            ]
+          );
+
+
+        if (
+          allocationUpdate.rows.length ===
+          0
+        ) {
+
+          throw new Error(
+            `No se pudo anular distribución Partner: ${item.name}`
+          );
+        }
+
+
+        continue;
+      }
+
+
+      throw new Error(
+        `Tipo de inventario inválido: ${item.name}`
+      );
+    }
+
+
+    // =============================================
+    // 6. ANULAR VENTA
+    // =============================================
+
+    const cancelResult =
       await client.query(
         `
-        INSERT INTO stock_movements
-        (
-          product_id,
-          type,
-          quantity,
-          cost_price,
-          staff_id,
-          company_id,
-          reference_type,
-          reference_id
-        )
-        VALUES
-        ($1,'IN',$2,$3,$4,$5,'sale_cancel',$6)
+        UPDATE sales
+        SET status =
+          'cancelled'
+        WHERE id = $1
+          AND company_id = $2
+          AND status <> 'cancelled'
+        RETURNING id
         `,
         [
-          item.product_id,
-          quantity,
-          costPrice,
-          staffId,
-          companyId,
-          saleId
+          saleId,
+          companyId
         ]
       );
-    }
 
-    // =============================
-    // 7️⃣ MARCAR VENTA CANCELADA
-    // =============================
-    const cancelResult = await client.query(
-      `
-      UPDATE sales
-      SET status = 'cancelled'
-      WHERE id = $1
-        AND company_id = $2
-        AND status IS DISTINCT FROM 'cancelled'
-      RETURNING id
-      `,
-      [
-        saleId,
-        companyId
-      ]
-    );
-
-    if (cancelResult.rows.length === 0) {
-      throw new Error(
-        "No se pudo anular la venta"
-      );
-    }
-
-    // =============================
-    // 8️⃣ REVERSAR INGRESO DE CAJA
-    // =============================
-    const saleTotal = Number(sale.total);
 
     if (
-      !Number.isFinite(saleTotal) ||
-      saleTotal < 0
+      cancelResult.rows.length ===
+      0
     ) {
+
       throw new Error(
-        "Total de venta inválido"
+        'No se pudo anular la venta'
       );
     }
+
+
+    // =============================================
+    // 7. REVERSAR CAJA
+    // =============================================
 
     await client.query(
       `
@@ -1453,45 +1747,72 @@ exports.cancelSale = async (req, res) => {
         company_id
       )
       VALUES
-      ('expense','sale_cancel',$1,$2,$3,$4)
+      (
+        'expense',
+        'sale_cancel',
+        $1,
+        $2,
+        $3,
+        $4
+      )
       `,
       [
         saleId,
-        saleTotal,
+        Number(
+          sale.total
+        ),
         staffId,
         companyId
       ]
     );
 
-    // =============================
-    // 9️⃣ TODO OK
-    // =============================
-    await client.query('COMMIT');
+
+    // =============================================
+    // 8. TODO CORRECTO
+    // =============================================
+
+    await client.query(
+      'COMMIT'
+    );
+
 
     return res.json({
-      success: true,
-      message: "Venta anulada correctamente"
+      success:
+        true,
+
+      message:
+        'Venta anulada correctamente'
     });
+
 
   } catch (err) {
 
     try {
-      await client.query('ROLLBACK');
+
+      await client.query(
+        'ROLLBACK'
+      );
+
     } catch (_) {}
 
+
     console.error(
-      "❌ ERROR ANULANDO VENTA:",
+      '❌ ERROR ANULANDO VENTA:',
       err
     );
 
-    return res.status(400).json({
-      error: err.message
-    });
+
+    return res
+      .status(400)
+      .json({
+        error:
+          err.message
+      });
+
 
   } finally {
 
     client.release();
-
   }
 };
 
