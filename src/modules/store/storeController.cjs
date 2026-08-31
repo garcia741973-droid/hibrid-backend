@@ -1,34 +1,132 @@
 const { pool } = require('../../config/db');
 
 
-// obtener productos
+// =====================================================
+// OBTENER PRODUCTOS HSTORE
+// PROPIOS + HIBRID PARTNERS
+// =====================================================
+
 exports.getProducts = async (req, res) => {
+
   try {
 
-    const companyId = req.user.company_id;
+    const companyId =
+      req.user.company_id;
 
-    const { rows } = await pool.query(`
-    SELECT id,name,description,price,stock,image_url
-    FROM products
-    WHERE is_active = true
-    AND company_id = $1
-    ORDER BY name
-    `,
-    [companyId]
+
+    const { rows } =
+      await pool.query(
+        `
+        SELECT
+
+          p.id,
+
+          CASE
+            WHEN p.inventory_source = 'partner'
+              THEN pc.name
+            ELSE p.name
+          END AS name,
+
+
+          CASE
+            WHEN p.inventory_source = 'partner'
+              THEN pc.description
+            ELSE p.description
+          END AS description,
+
+
+          CASE
+            WHEN p.inventory_source = 'partner'
+              THEN pc.price
+            ELSE p.price
+          END AS price,
+
+
+          CASE
+            WHEN p.inventory_source = 'partner'
+              THEN pc.stock
+            ELSE p.stock
+          END AS stock,
+
+
+          CASE
+            WHEN p.inventory_source = 'partner'
+              THEN pc.image_url
+            ELSE p.image_url
+          END AS image_url,
+
+
+          p.inventory_source,
+
+          p.partner_catalog_id,
+
+
+          CASE
+            WHEN p.inventory_source = 'partner'
+              THEN TRUE
+            ELSE FALSE
+          END AS is_partner
+
+
+        FROM products p
+
+
+        LEFT JOIN partner_catalog_products pc
+          ON pc.id = p.partner_catalog_id
+
+
+        WHERE
+          p.company_id = $1
+
+          AND p.is_active = TRUE
+
+          AND (
+            p.inventory_source = 'owned'
+
+            OR (
+              p.inventory_source = 'partner'
+              AND pc.id IS NOT NULL
+              AND pc.is_active = TRUE
+            )
+          )
+
+
+        ORDER BY
+          CASE
+            WHEN p.inventory_source = 'partner'
+              THEN pc.name
+            ELSE p.name
+          END
+        `,
+        [
+          companyId
+        ]
+      );
+
+
+    return res.json(
+      rows
     );
 
-    res.json(rows);
 
-    }catch(err){
+  } catch (err) {
 
-    console.error("ERROR PRODUCTS:", err);
+    console.error(
+      "ERROR PRODUCTS:",
+      err
+    );
 
-    res.status(500).json({
-        error:'Error obteniendo productos',
-        details: err.message
-    });
 
-    }
+    return res
+      .status(500)
+      .json({
+        error:
+          'Error obteniendo productos',
+
+        details:
+          err.message
+      });
+  }
 };
 
 
