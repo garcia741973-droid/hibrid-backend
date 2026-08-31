@@ -319,228 +319,780 @@ exports.createProduct = async (req, res) => {
 
 exports.createSale = async (req, res) => {
 
-  const client = await pool.connect();
+  const client =
+    await pool.connect();
+
 
   try {
 
-    await client.query('BEGIN');
-
-    const staffId = req.user.id;
-    const companyId = req.user.company_id;
-    const { items } = req.body;
-
-    // =============================
-    // 1️⃣ VALIDAR VENTA
-    // =============================
-    if (!Array.isArray(items) || items.length === 0) {
-      throw new Error("La venta no contiene productos");
-    }
-
-    let total = 0;
-
-    // =============================
-    // 2️⃣ CREAR CABECERA
-    // =============================
-    const sale = await client.query(
-      `
-      INSERT INTO sales
-      (staff_id, total, company_id)
-      VALUES ($1, 0, $2)
-      RETURNING id
-      `,
-      [staffId, companyId]
+    await client.query(
+      'BEGIN'
     );
 
-    if (sale.rows.length === 0) {
-      throw new Error("Error creando venta");
+
+    const staffId =
+      req.user.id;
+
+
+    const companyId =
+      req.user.company_id;
+
+
+    const { items } =
+      req.body;
+
+
+    // =============================================
+    // 1. VALIDAR VENTA
+    // =============================================
+
+    if (
+      !Array.isArray(items) ||
+      items.length === 0
+    ) {
+
+      throw new Error(
+        'La venta no contiene productos'
+      );
     }
 
-    const saleId = sale.rows[0].id;
 
-    // =============================
-    // 3️⃣ PROCESAR PRODUCTOS
-    // =============================
-    for (const item of items) {
+    const roundMoney =
+      value =>
+        Math.round(
+          (
+            Number(value) +
+            Number.EPSILON
+          ) * 100
+        ) / 100;
 
-      const productId = Number.parseInt(
-        item.product_id,
-        10
-      );
 
-      const quantity = Number.parseInt(
-        item.quantity,
-        10
-      );
+    let total =
+      0;
 
-      if (
-        !Number.isInteger(productId) ||
-        productId <= 0
-      ) {
-        throw new Error("Producto inválido");
-      }
 
-      if (
-        !Number.isInteger(quantity) ||
-        quantity <= 0
-      ) {
-        throw new Error("Cantidad inválida");
-      }
+    let partnerSettlementTotal =
+      0;
 
-      // 🔒 Bloqueamos el producto durante la venta
-      // y obtenemos precio/costo DESDE PostgreSQL.
-      const product = await client.query(
+
+    let partnerCommissionTotal =
+      0;
+
+
+    // =============================================
+    // 2. CREAR CABECERA
+    // =============================================
+
+    const sale =
+      await client.query(
         `
-        SELECT
-          id,
-          name,
-          stock,
-          price,
-          cost_price,
-          is_active
-        FROM products
-        WHERE id = $1
-          AND company_id = $2
-        FOR UPDATE
+        INSERT INTO sales
+        (
+          staff_id,
+          total,
+          company_id
+        )
+        VALUES
+        (
+          $1,
+          0,
+          $2
+        )
+        RETURNING id
         `,
         [
-          productId,
+          staffId,
           companyId
         ]
       );
 
-      if (product.rows.length === 0) {
-        throw new Error("Producto no existe");
+
+    if (
+      sale.rows.length === 0
+    ) {
+
+      throw new Error(
+        'Error creando venta'
+      );
+    }
+
+
+    const saleId =
+      sale.rows[0].id;
+
+
+    // =============================================
+    // 3. PROCESAR PRODUCTOS
+    // =============================================
+
+    for (
+      const item of items
+    ) {
+
+      const productId =
+        Number.parseInt(
+          item.product_id,
+          10
+        );
+
+
+      const quantity =
+        Number.parseInt(
+          item.quantity,
+          10
+        );
+
+
+      if (
+        !Number.isInteger(
+          productId
+        ) ||
+        productId <= 0
+      ) {
+
+        throw new Error(
+          'Producto inválido'
+        );
       }
 
-      const p = product.rows[0];
 
-      if (!p.is_active) {
+      if (
+        !Number.isInteger(
+          quantity
+        ) ||
+        quantity <= 0
+      ) {
+
+        throw new Error(
+          'Cantidad inválida'
+        );
+      }
+
+
+      // ===========================================
+      // 4. BLOQUEAR PRODUCTO LOCAL
+      // ===========================================
+
+      const product =
+        await client.query(
+          `
+          SELECT
+            id,
+            name,
+            stock,
+            price,
+            cost_price,
+            is_active,
+            inventory_source,
+            partner_catalog_id
+          FROM products
+          WHERE id = $1
+            AND company_id = $2
+          FOR UPDATE
+          `,
+          [
+            productId,
+            companyId
+          ]
+        );
+
+
+      if (
+        product.rows.length === 0
+      ) {
+
+        throw new Error(
+          'Producto no existe'
+        );
+      }
+
+
+      const p =
+        product.rows[0];
+
+
+      if (
+        !p.is_active
+      ) {
+
         throw new Error(
           `Producto inactivo: ${p.name}`
         );
       }
 
-      if (Number(p.stock) < quantity) {
-        throw new Error(
-          `Stock insuficiente: ${p.name}`
-        );
-      }
 
-      // =============================
-      // 🔒 PRECIO AUTORITATIVO BACKEND
-      // =============================
-      const unitPrice = Number(p.price);
-      const costPrice = Number(p.cost_price || 0);
+      const inventorySource =
+        p.inventory_source ||
+        'owned';
+
+
+      // ===========================================
+      // PRODUCTO PROPIO
+      // ===========================================
 
       if (
-        !Number.isFinite(unitPrice) ||
-        unitPrice < 0
+        inventorySource ===
+        'owned'
       ) {
-        throw new Error(
-          `Precio inválido: ${p.name}`
+
+        if (
+          Number(p.stock) <
+          quantity
+        ) {
+
+          throw new Error(
+            `Stock insuficiente: ${p.name}`
+          );
+        }
+
+
+        const unitPrice =
+          Number(
+            p.price
+          );
+
+
+        const costPrice =
+          Number(
+            p.cost_price || 0
+          );
+
+
+        if (
+          !Number.isFinite(
+            unitPrice
+          ) ||
+          unitPrice < 0
+        ) {
+
+          throw new Error(
+            `Precio inválido: ${p.name}`
+          );
+        }
+
+
+        if (
+          !Number.isFinite(
+            costPrice
+          ) ||
+          costPrice < 0
+        ) {
+
+          throw new Error(
+            `Costo inválido: ${p.name}`
+          );
+        }
+
+
+        const subtotal =
+          roundMoney(
+            quantity *
+            unitPrice
+          );
+
+
+        total =
+          roundMoney(
+            total +
+            subtotal
+          );
+
+
+        // =========================================
+        // DETALLE VENTA OWNED
+        // =========================================
+
+        await client.query(
+          `
+          INSERT INTO sale_items
+          (
+            sale_id,
+            product_id,
+            quantity,
+            unit_price,
+            subtotal,
+            company_id
+          )
+          VALUES
+          (
+            $1,
+            $2,
+            $3,
+            $4,
+            $5,
+            $6
+          )
+          `,
+          [
+            saleId,
+            productId,
+            quantity,
+            unitPrice,
+            subtotal,
+            companyId
+          ]
         );
+
+
+        // =========================================
+        // DESCONTAR STOCK LOCAL
+        // =========================================
+
+        const update =
+          await client.query(
+            `
+            UPDATE products
+            SET stock =
+              stock - $1
+            WHERE id = $2
+              AND company_id = $3
+              AND stock >= $1
+            RETURNING stock
+            `,
+            [
+              quantity,
+              productId,
+              companyId
+            ]
+          );
+
+
+        if (
+          update.rows.length === 0
+        ) {
+
+          throw new Error(
+            `Stock insuficiente: ${p.name}`
+          );
+        }
+
+
+        // =========================================
+        // MOVIMIENTO INVENTARIO LOCAL
+        // =========================================
+
+        await client.query(
+          `
+          INSERT INTO stock_movements
+          (
+            product_id,
+            type,
+            quantity,
+            cost_price,
+            staff_id,
+            company_id,
+            reference_type,
+            reference_id
+          )
+          VALUES
+          (
+            $1,
+            'OUT',
+            $2,
+            $3,
+            $4,
+            $5,
+            'sale',
+            $6
+          )
+          `,
+          [
+            productId,
+            quantity,
+            costPrice,
+            staffId,
+            companyId,
+            saleId
+          ]
+        );
+
+
+        continue;
       }
+
+
+      // ===========================================
+      // PRODUCTO HIBRID PARTNER
+      // ===========================================
 
       if (
-        !Number.isFinite(costPrice) ||
-        costPrice < 0
+        inventorySource ===
+        'partner'
       ) {
-        throw new Error(
-          `Costo inválido: ${p.name}`
+
+        const partnerCatalogId =
+          Number.parseInt(
+            p.partner_catalog_id,
+            10
+          );
+
+
+        if (
+          !Number.isInteger(
+            partnerCatalogId
+          ) ||
+          partnerCatalogId <= 0
+        ) {
+
+          throw new Error(
+            `Producto Partner sin catálogo asociado: ${p.name}`
+          );
+        }
+
+
+        // =========================================
+        // BLOQUEAR STOCK CENTRAL
+        // =========================================
+
+        const partnerProduct =
+          await client.query(
+            `
+            SELECT
+              id,
+              name,
+              settlement_price,
+              price,
+              stock,
+              is_active
+            FROM partner_catalog_products
+            WHERE id = $1
+            FOR UPDATE
+            `,
+            [
+              partnerCatalogId
+            ]
+          );
+
+
+        if (
+          partnerProduct.rows.length ===
+          0
+        ) {
+
+          throw new Error(
+            `Producto Partner no encontrado: ${p.name}`
+          );
+        }
+
+
+        const pc =
+          partnerProduct.rows[0];
+
+
+        if (
+          !pc.is_active
+        ) {
+
+          throw new Error(
+            `Producto Partner inactivo: ${pc.name}`
+          );
+        }
+
+
+        if (
+          Number(pc.stock) <
+          quantity
+        ) {
+
+          throw new Error(
+            `Stock central insuficiente: ${pc.name}`
+          );
+        }
+
+
+        // =========================================
+        // PRECIOS AUTORITATIVOS CENTRALES
+        // =========================================
+
+        const unitPrice =
+          Number(
+            pc.price
+          );
+
+
+        const settlementUnitPrice =
+          Number(
+            pc.settlement_price
+          );
+
+
+        if (
+          !Number.isFinite(
+            unitPrice
+          ) ||
+          unitPrice < 0
+        ) {
+
+          throw new Error(
+            `Precio Partner inválido: ${pc.name}`
+          );
+        }
+
+
+        if (
+          !Number.isFinite(
+            settlementUnitPrice
+          ) ||
+          settlementUnitPrice < 0
+        ) {
+
+          throw new Error(
+            `Monto MLM inválido: ${pc.name}`
+          );
+        }
+
+
+        if (
+          unitPrice <
+          settlementUnitPrice
+        ) {
+
+          throw new Error(
+            `Precio Partner menor al monto MLM: ${pc.name}`
+          );
+        }
+
+
+        const subtotal =
+          roundMoney(
+            quantity *
+            unitPrice
+          );
+
+
+        const settlementAmount =
+          roundMoney(
+            quantity *
+            settlementUnitPrice
+          );
+
+
+        const commissionAmount =
+          roundMoney(
+            subtotal -
+            settlementAmount
+          );
+
+
+        total =
+          roundMoney(
+            total +
+            subtotal
+          );
+
+
+        partnerSettlementTotal =
+          roundMoney(
+            partnerSettlementTotal +
+            settlementAmount
+          );
+
+
+        partnerCommissionTotal =
+          roundMoney(
+            partnerCommissionTotal +
+            commissionAmount
+          );
+
+
+        // =========================================
+        // DETALLE VENTA PARTNER
+        // NECESITAMOS sale_item_id
+        // =========================================
+
+        const saleItem =
+          await client.query(
+            `
+            INSERT INTO sale_items
+            (
+              sale_id,
+              product_id,
+              quantity,
+              unit_price,
+              subtotal,
+              company_id
+            )
+            VALUES
+            (
+              $1,
+              $2,
+              $3,
+              $4,
+              $5,
+              $6
+            )
+            RETURNING id
+            `,
+            [
+              saleId,
+              productId,
+              quantity,
+              unitPrice,
+              subtotal,
+              companyId
+            ]
+          );
+
+
+        if (
+          saleItem.rows.length ===
+          0
+        ) {
+
+          throw new Error(
+            `No se pudo crear detalle Partner: ${pc.name}`
+          );
+        }
+
+
+        const saleItemId =
+          saleItem.rows[0].id;
+
+
+        // =========================================
+        // DESCONTAR STOCK CENTRAL
+        // NO TOCAR products.stock
+        // =========================================
+
+        const partnerStockUpdate =
+          await client.query(
+            `
+            UPDATE partner_catalog_products
+            SET
+              stock =
+                stock - $1,
+              updated_at =
+                NOW()
+            WHERE id = $2
+              AND stock >= $1
+            RETURNING stock
+            `,
+            [
+              quantity,
+              partnerCatalogId
+            ]
+          );
+
+
+        if (
+          partnerStockUpdate.rows.length ===
+          0
+        ) {
+
+          throw new Error(
+            `Stock central insuficiente: ${pc.name}`
+          );
+        }
+
+
+        // =========================================
+        // MOVIMIENTO STOCK CENTRAL
+        // =========================================
+
+        await client.query(
+          `
+          INSERT INTO partner_stock_movements
+          (
+            partner_catalog_id,
+            type,
+            quantity,
+            settlement_price,
+            company_id,
+            reference_type,
+            reference_id
+          )
+          VALUES
+          (
+            $1,
+            'OUT',
+            $2,
+            $3,
+            $4,
+            'sale',
+            $5
+          )
+          `,
+          [
+            partnerCatalogId,
+            quantity,
+            settlementUnitPrice,
+            companyId,
+            saleId
+          ]
         );
+
+
+        // =========================================
+        // DISTRIBUCIÓN ECONÓMICA PARTNER
+        // =========================================
+
+        await client.query(
+          `
+          INSERT INTO partner_sale_allocations
+          (
+            sale_id,
+            sale_item_id,
+            product_id,
+            partner_catalog_id,
+            company_id,
+            quantity,
+            unit_price,
+            settlement_unit_price,
+            gross_amount,
+            settlement_amount,
+            commission_amount,
+            status
+          )
+          VALUES
+          (
+            $1,
+            $2,
+            $3,
+            $4,
+            $5,
+            $6,
+            $7,
+            $8,
+            $9,
+            $10,
+            $11,
+            'pending'
+          )
+          `,
+          [
+            saleId,
+            saleItemId,
+            productId,
+            partnerCatalogId,
+            companyId,
+            quantity,
+            unitPrice,
+            settlementUnitPrice,
+            subtotal,
+            settlementAmount,
+            commissionAmount
+          ]
+        );
+
+
+        continue;
       }
 
-      const subtotal = quantity * unitPrice;
 
-      total += subtotal;
+      // ===========================================
+      // FUENTE DESCONOCIDA
+      // ===========================================
 
-      // =============================
-      // 4️⃣ DETALLE DE VENTA
-      // =============================
-      await client.query(
-        `
-        INSERT INTO sale_items
-        (
-          sale_id,
-          product_id,
-          quantity,
-          unit_price,
-          subtotal,
-          company_id
-        )
-        VALUES ($1,$2,$3,$4,$5,$6)
-        `,
-        [
-          saleId,
-          productId,
-          quantity,
-          unitPrice,
-          subtotal,
-          companyId
-        ]
+      throw new Error(
+        `Tipo de inventario inválido: ${p.name}`
       );
-
-      // =============================
-      // 5️⃣ DESCONTAR STOCK
-      // =============================
-      const update = await client.query(
-        `
-        UPDATE products
-        SET stock = stock - $1
-        WHERE id = $2
-          AND company_id = $3
-          AND stock >= $1
-        RETURNING stock
-        `,
-        [
-          quantity,
-          productId,
-          companyId
-        ]
-      );
-
-      if (update.rows.length === 0) {
-        throw new Error(
-          `Stock insuficiente: ${p.name}`
-        );
-      }
-
-      // =============================
-      // 6️⃣ MOVIMIENTO DE INVENTARIO
-      // IMPORTANTE:
-      // cost_price = COSTO, NO precio venta
-      // =============================
-      await client.query(
-        `
-        INSERT INTO stock_movements
-        (
-          product_id,
-          type,
-          quantity,
-          cost_price,
-          staff_id,
-          company_id,
-          reference_type,
-          reference_id
-        )
-        VALUES
-        ($1,'OUT',$2,$3,$4,$5,'sale',$6)
-        `,
-        [
-          productId,
-          quantity,
-          costPrice,
-          staffId,
-          companyId,
-          saleId
-        ]
-      );
-
     }
 
-    // =============================
-    // 7️⃣ TOTAL DEFINITIVO
-    // =============================
+
+    // =============================================
+    // 5. TOTAL DEFINITIVO
+    // =============================================
+
     await client.query(
       `
       UPDATE sales
@@ -555,9 +1107,12 @@ exports.createSale = async (req, res) => {
       ]
     );
 
-    // =============================
-    // 8️⃣ INGRESO EN CAJA
-    // =============================
+
+    // =============================================
+    // 6. INGRESO REAL EN CAJA
+    // TODO LO COBRADO AL CLIENTE ENTRA A CAJA
+    // =============================================
+
     await client.query(
       `
       INSERT INTO cash_movements
@@ -570,7 +1125,14 @@ exports.createSale = async (req, res) => {
         company_id
       )
       VALUES
-      ('income','sale',$1,$2,$3,$4)
+      (
+        'income',
+        'sale',
+        $1,
+        $2,
+        $3,
+        $4
+      )
       `,
       [
         saleId,
@@ -580,38 +1142,63 @@ exports.createSale = async (req, res) => {
       ]
     );
 
-    // =============================
-    // 9️⃣ TODO CORRECTO
-    // =============================
-    await client.query('COMMIT');
+
+    // =============================================
+    // 7. TODO CORRECTO
+    // =============================================
+
+    await client.query(
+      'COMMIT'
+    );
+
 
     return res.json({
-      success: true,
-      sale_id: saleId,
-      total
+      success:
+        true,
+
+      sale_id:
+        saleId,
+
+      total:
+        total,
+
+      partner_settlement_total:
+        partnerSettlementTotal,
+
+      partner_commission_total:
+        partnerCommissionTotal
     });
+
 
   } catch (err) {
 
     try {
-      await client.query('ROLLBACK');
+
+      await client.query(
+        'ROLLBACK'
+      );
+
     } catch (_) {}
 
+
     console.error(
-      "❌ ERROR CREANDO VENTA:",
+      '❌ ERROR CREANDO VENTA:',
       err
     );
 
-    return res.status(400).json({
-      error: err.message
-    });
+
+    return res
+      .status(400)
+      .json({
+        error:
+          err.message
+      });
+
 
   } finally {
 
     client.release();
-
   }
-
 };
 
 exports.cancelSale = async (req, res) => {
