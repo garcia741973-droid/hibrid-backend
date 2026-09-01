@@ -1334,9 +1334,33 @@ exports.cancelSale = async (req, res) => {
           p.partner_catalog_id,
 
           COALESCE(
-            sm.cost_price,
+
+            (
+              SELECT
+                sm.cost_price
+
+              FROM stock_movements sm
+
+              WHERE sm.reference_type = 'sale'
+
+                AND sm.reference_id = si.sale_id
+
+                AND sm.product_id = si.product_id
+
+                AND sm.type = 'OUT'
+
+                AND sm.company_id = $2
+
+              ORDER BY
+                sm.id DESC
+
+              LIMIT 1
+            ),
+
             p.cost_price,
+
             0
+
           ) AS cost_price,
 
           psa.id AS allocation_id,
@@ -1350,26 +1374,22 @@ exports.cancelSale = async (req, res) => {
 
 
         JOIN products p
+
           ON p.id = si.product_id
-         AND p.company_id = si.company_id
 
-
-        LEFT JOIN stock_movements sm
-          ON sm.reference_type = 'sale'
-         AND sm.reference_id = si.sale_id
-         AND sm.product_id = si.product_id
-         AND sm.type = 'OUT'
-         AND sm.company_id = si.company_id
+        AND p.company_id = $2
 
 
         LEFT JOIN partner_sale_allocations psa
+
           ON psa.sale_item_id = si.id
-         AND psa.sale_id = si.sale_id
-         AND psa.company_id = si.company_id
+
+        AND psa.sale_id = si.sale_id
+
+        AND psa.company_id = $2
 
 
         WHERE si.sale_id = $1
-          AND si.company_id = $2
 
         ORDER BY si.id
         `,
