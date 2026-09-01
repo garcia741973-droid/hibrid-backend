@@ -1331,7 +1331,10 @@ exports.cancelSale = async (req, res) => {
             'owned'
           ) AS inventory_source,
 
-          p.partner_catalog_id,
+          COALESCE(
+            psa.partner_catalog_id,
+            p.partner_catalog_id
+          ) AS partner_catalog_id,
 
           COALESCE(
 
@@ -1419,10 +1422,12 @@ exports.cancelSale = async (req, res) => {
     ) {
 
       if (
-        item.inventory_source ===
-          'partner' &&
+
+        item.allocation_id &&
+
         item.allocation_status ===
           'settled'
+
       ) {
 
         throw new Error(
@@ -1463,8 +1468,9 @@ exports.cancelSale = async (req, res) => {
       // ===========================================
 
       if (
-        item.inventory_source ===
-        'owned'
+
+        !item.allocation_id
+
       ) {
 
         const costPrice =
@@ -1551,8 +1557,9 @@ exports.cancelSale = async (req, res) => {
       // ===========================================
 
       if (
-        item.inventory_source ===
-        'partner'
+
+        item.allocation_id
+
       ) {
 
         const partnerCatalogId =
